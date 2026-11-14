@@ -2,12 +2,41 @@ export type AppView = 'chat' | 'vitals' | 'symptoms' | 'settings'
 
 export type MessageRole = 'user' | 'assistant' | 'system'
 
+export interface GameAction {
+  gameId: string
+  title: string
+  description: string
+  url: string
+  badge?: string
+}
+
+export interface GameTelemetryMetrics {
+  totalGripReps: number
+  emergencyRespawnsUsed: number
+  isometricShieldHoldSeconds: number
+  survivalDurationSeconds: number
+  averageSqueezeRatePerMin: number
+  solarStormsDeflected: number
+  telemetryScore: number
+}
+
+export interface GameTelemetryPayload {
+  timestamp: string
+  missionStatus: string
+  targetRepGoal: number
+  goalAchieved: boolean
+  terminationCause: string
+  metrics: GameTelemetryMetrics
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   createdAt: string
   triageLevel?: TriageLevel
+  gameAction?: GameAction
+  gameTelemetry?: GameTelemetryPayload
 }
 
 export type TriageLevel = 'info' | 'monitor' | 'urgent' | 'emergency'
