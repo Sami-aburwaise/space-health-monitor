@@ -30,9 +30,8 @@ Do **not** introduce a second UI kit (MUI, Chakra, Ant, custom CSS-component lib
    - Fixes: `fix/<short-name>`
    - Chores: `chore/<short-name>`
 3. Keep commits focused and scoped to the branch purpose.
-4. **When the work is finished**, push the branch and **open a GitHub pull request** into `main` (use `gh pr create`). Prefer a draft PR if review is still needed; otherwise open a ready PR with a clear summary and test plan.
-5. Do not force-push `main` / `master`.
-6. Do not commit secrets (API keys, `.env`).
+4. Do not force-push `main` / `master`.
+5. Do not commit secrets (API keys, `.env`).
 
 ## Product rules
 

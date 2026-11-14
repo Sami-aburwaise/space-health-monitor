@@ -1,9 +1,9 @@
 ---
-description: Always branch for new work; finish by opening a GitHub PR
+description: Always branch for new work; never ship features on main
 alwaysApply: true
 ---
 
-# Git branching & pull requests
+# Git branching
 
 - Before starting a feature, fix, or non-trivial refactor, create a new branch from the latest default branch.
 - Naming:
@@ -13,16 +13,13 @@ alwaysApply: true
 - Do not commit feature work directly on `main` / `master`.
 - Do not force-push shared default branches.
 - Keep commits scoped to the branch purpose.
-- **When the task is finished**: push the branch (`git push -u origin HEAD`) and open a GitHub pull request into `main` with `gh pr create` (summary + test plan). Use a draft PR if the user still needs to review unfinished work.
+- Only commit, push, or open a PR when the user asks.
 
 ```bash
 # ✅ GOOD
 git checkout -b feature/chat-export
-# …implement…
-git push -u origin HEAD
-gh pr create --title "…" --body "…"
+# work… then commit / PR when asked
 
 # ❌ BAD
 # commit feature changes while still on main
-# finish work without opening a PR
 ```
