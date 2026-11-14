@@ -1,6 +1,29 @@
 import { formatExtractedMetrics } from '@/lib/extractVitals'
 import type { ChatMessage, SymptomEntry, TriageLevel, VitalMetrics, VitalReading } from '@/types/health'
 
+export function isPlayIntent(text: string): boolean {
+  const lower = text.trim().toLowerCase()
+  if (
+    lower === 'play' ||
+    lower === 'game' ||
+    lower === 'games' ||
+    lower === 'play game' ||
+    lower === 'start game' ||
+    lower === 'launch game' ||
+    lower === 'play asteroid run' ||
+    lower === 'play asteroid' ||
+    lower === 'asteroid run' ||
+    lower === 'grip test' ||
+    lower === 'grip assessment'
+  ) {
+    return true
+  }
+  return (
+    /^(play|launch|start)\b/i.test(lower) ||
+    /\b(play (a |the )?game|grip test|asteroid run)\b/i.test(lower)
+  )
+}
+
 const EMERGENCY = [
   'chest pain',
   "can't breathe",
@@ -57,7 +80,23 @@ export function simulateHealthReply(
   vitals: VitalReading[],
   symptoms: SymptomEntry[],
   extracted: VitalMetrics | null,
-): Pick<ChatMessage, 'content' | 'triageLevel'> {
+): Pick<ChatMessage, 'content' | 'triageLevel' | 'gameAction'> {
+  if (isPlayIntent(userText)) {
+    return {
+      content:
+        'Ready for crew neuromuscular & motor telemetry assessment. Launch the **Asteroid Run & Shield Charge** protocol to evaluate grip strength, response times, and isometric endurance in simulated microgravity.',
+      triageLevel: 'info',
+      gameAction: {
+        gameId: 'asteroid-run',
+        title: 'Asteroid Run & Shield Charge',
+        description:
+          'NASA Bio-Telemetry Grip & Neuromuscular Assessment. 30-rep quota with isometric solar shield hold.',
+        url: '/games/asteroid-run.html',
+        badge: 'NASA BIO-SYS // CREW EXERCISE',
+      },
+    }
+  }
+
   const level = detectLevel(userText)
   const context = `${summarizeVitals(vitals)} ${summarizeSymptoms(symptoms)}`
 

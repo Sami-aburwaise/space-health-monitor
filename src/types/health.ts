@@ -2,6 +2,33 @@ export type AppView = 'chat' | 'vitals' | 'symptoms' | 'settings'
 
 export type MessageRole = 'user' | 'assistant' | 'system'
 
+export interface GameAction {
+  gameId: string
+  title: string
+  description: string
+  url: string
+  badge?: string
+}
+
+export interface GameTelemetryMetrics {
+  totalGripReps: number
+  emergencyRespawnsUsed: number
+  isometricShieldHoldSeconds: number
+  survivalDurationSeconds: number
+  averageSqueezeRatePerMin: number
+  solarStormsDeflected: number
+  telemetryScore: number
+}
+
+export interface GameTelemetryPayload {
+  timestamp: string
+  missionStatus: string
+  targetRepGoal: number
+  goalAchieved: boolean
+  terminationCause: string
+  metrics: GameTelemetryMetrics
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -10,6 +37,8 @@ export interface ChatMessage {
   triageLevel?: TriageLevel
   /** True when this assistant reply saved vitals extracted from the user's message */
   loggedVitals?: boolean
+  gameAction?: GameAction
+  gameTelemetry?: GameTelemetryPayload
 }
 
 export type TriageLevel = 'info' | 'monitor' | 'urgent' | 'emergency'

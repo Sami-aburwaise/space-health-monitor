@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Asteroid Run & Shield Charge | NASA Grip Health Telemetry</title>
+  <style>
+    /* ==========================================================================
+       1. NASA / SCI-FI TELEMETRY THEME VARIABLES & RESET
+       ========================================================================== */
+    :root {
+      --bg-deep: #050914;
+      --bg-panel: #0b132b;
+      --bg-card: #111c3d;
+      --border-subtle: rgba(56, 189, 248, 0.22);
+      --border-bright: rgba(56, 189, 248, 0.6);
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      background-color: var(--bg-deep);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      overflow-x: hidden;
+    }
+
+    /* ==========================================================================
+       2. MAIN TELEMETRY SHELL CONTAINER
+       ========================================================================== */
+    .telemetry-shell {
+      width: 100%;
+      max-width: 960px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 30px rgba(56, 189, 248, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Header Bar */
+    .telemetry-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 20px;
+      background: rgba(5, 9, 20, 0.85);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nasa-badge {
+      background: linear-gradient(135deg, #0284c7, #1d4ed8);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      text-transform: uppercase;
+    }
+
+    .title-block h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--text-primary);
+    }
+
+    .title-block p {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-pill {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      letter-spacing: 0.04em;
+      transition: all 0.25s ease;
+    }
+
+    .phase-pill.storm-alert {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--accent-amber);
+      border-color: var(--accent-amber);
+      animation: pulseWarning 0.8s infinite alternate;
+    }
+
+    @keyframes pulseWarning {
+      from { box-shadow: 0 0 4px rgba(245, 158, 11, 0.3); }
+      to { box-shadow: 0 0 16px rgba(245, 158, 11, 0.8); }
+    }
+
+    .icon-btn {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .icon-btn:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.12);
+    }
+
+    /* ==========================================================================
+       3. LIVE BIOMETRIC HUD GRID
+       ========================================================================== */
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 12px 20px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .hud-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .hud-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      margin-bottom: 4px;
+    }
+
+    .hud-value {
+      font-family: var(--font-mono);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .hud-value.cyan { color: var(--accent-cyan); }
+    .hud-value.emerald { color: var(--accent-emerald); }
+    .hud-value.amber { color: var(--accent-amber); }
+
+    .hud-sub {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* ==========================================================================
+       4. INTERACTIVE CANVAS VIEWPORT & OVERLAY MODALS
+       ========================================================================== */
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      max-height: 460px;
+      background: #03060f;
+      overflow: hidden;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Start & Game Over Overlays */
+    .overlay-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 9, 20, 0.84);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 20;
+      transition: opacity 0.25s ease;
+    }
+
+    .overlay-backdrop.hidden {
+      display: none;
+    }
+
+    .modal-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 14px;
+      max-width: 520px;
+      width: 100%;
+      padding: 22px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8);
+      text-align: center;
+    }
+
+    .modal-tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.12);
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+
+    .modal-card h2 {
+      font-size: 1.35rem;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    .modal-card p {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    .protocol-steps {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      text-align: left;
+      margin-bottom: 18px;
+    }
+
+    .step-box {
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .step-box strong {
+      display: block;
+      font-size: 0.78rem;
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+      margin-bottom: 4px;
+    }
+
+    .step-box.storm strong {
+      color: var(--accent-amber);
+    }
+
+    .step-box span {
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      line-height: 1.35;
+      display: block;
+    }
+
+    /* Telemetry Summary Report Grid */
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+
+    .report-item {
+      background: var(--bg-card);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .report-item .r-label {
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .report-item .r-val {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent-emerald);
+      margin-top: 2px;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .primary-btn {
+      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 22px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(14, 165, 233, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .primary-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(14, 165, 233, 0.5);
+    }
+
+    .secondary-btn {
+      background: var(--bg-card);
+      color: var(--accent-cyan);
+      border: 1px solid var(--border-bright);
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .secondary-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+    }
+
+    .copy-feedback {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent-emerald);
+      margin-top: 8px;
+      min-height: 18px;
+    }
+
+    /* ==========================================================================
+       5. BOTTOM GRIP SENSOR TRIGGER & REAL-TIME FORCE BAR
+       ========================================================================== */
+    .sensor-deck {
+      padding: 14px 20px;
+      background: rgba(5, 9, 20, 0.92);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .grip-meter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .sensor-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      min-width: 175px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #475569;
+      transition: all 0.1s ease;
+    }
+
+    .status-dot.active {
+      background: var(--accent-emerald);
+      box-shadow: 0 0 12px var(--accent-emerald);
+    }
+
+    .meter-track {
+      flex: 1;
+      height: 14px;
+      background: var(--bg-card);
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald));
+      border-radius: 999px;
+      transition: width 0.06s linear;
+    }
+
+    .grip-trigger-btn {
+      width: 100%;
+      padding: 15px;
+      border-radius: 12px;
+      border: 2px solid var(--accent-cyan);
+      background: linear-gradient(180deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.06));
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.08s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .grip-trigger-btn.pressed,
+    .grip-trigger-btn:active {
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.45), rgba(16, 185, 129, 0.25));
+      border-color: var(--accent-emerald);
+      transform: scale(0.99);
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.35);
+    }
+
+    /* ==========================================================================
+       6. RESPONSIVE ADAPTATIONS (MOBILE / TABLET)
+       ========================================================================== */
+    @media (max-width: 720px) {
+      .hud-grid {
+        grid-template-columns: repeat(2, 1fr);
+        padding: 10px 14px;
+      }
+
+      .protocol-steps {
+        grid-template-columns: 1fr;
+      }
+
+      .canvas-wrapper {
+        aspect-ratio: 4 / 3;
+      }
+
+      .telemetry-header {
+        padding: 12px 14px;
+      }
+
+      .hud-value {
+        font-size: 1.15rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- MAIN TELEMETRY APPLICATION CONTAINER -->
+  <div class="telemetry-shell" id="appShell">
+    
+    <!-- Top Header -->
+    <header class="telemetry-header">
+      <div class="brand-group">
+        <span class="nasa-badge">NASA SPACE APPS // BIO-SYS</span>
+        <div class="title-block">
+          <h1>Asteroid Run &amp; Shield Charge</h1>
+          <p>ASTRONAUT NEUROMUSCULAR &amp; GRIP TELEMETRY</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="phase-pill" id="phaseBadge">STANDBY // READY</div>
+        <button class="icon-btn" id="muteToggleBtn" title="Toggle Telemetry Audio">SFX: ON</button>
+        <button class="icon-btn" id="headerExitBtn" title="Return to Health Chat" style="color: var(--accent-cyan); border-color: rgba(56, 189, 248, 0.45); font-weight: 600;">← RETURN TO CHAT</button>
+      </div>
+    </header>
+
+    <!-- Live Biometric Telemetry HUD -->
+    <section class="hud-grid" aria-label="Live Biometric Metrics">
+      <div class="hud-card">
+        <span class="hud-label">Grip Squeezes (Reps)</span>
+        <span class="hud-value cyan" id="hudReps">0 / 30</span>
+        <span class="hud-sub" id="hudNextStorm">Goal: 30 reps (Respawn active)</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">Shield Hold Time</span>
+        <span class="hud-value emerald" id="hudHoldTime">0.0s</span>
+        <span class="hud-sub">Isometric endurance</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">Survival Time</span>
+        <span class="hud-value" id="hudSurvivalTime">0.0s</span>
+        <span class="hud-sub" id="hudRepRate">0.0 reps/min</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">Mission Score</span>
+        <span class="hud-value amber" id="hudScore">0</span>
+        <span class="hud-sub">Telemetry index</span>
+      </div>
+    </section>
+
+    <!-- Interactive Game & Telemetry Canvas -->
+    <div class="canvas-wrapper" id="canvasContainer">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- Start Screen Modal -->
+      <div class="overlay-backdrop" id="startOverlay">
+        <div class="modal-card">
+          <span class="modal-tag">CREW HEALTH ASSESSMENT PROTOCOL</span>
+          <h2>Asteroid Run &amp; Shield Charge</h2>
+          <p>
+            Maintain astronaut hand strength in microgravity. Use your grip sensor (or Spacebar / Touch button) to navigate asteroids and charge solar deflector shields.
+          </p>
+
+          <div class="protocol-steps">
+            <div class="step-box">
+              <strong>PHASE 1: ASTEROID DODGE</strong>
+              <span>Reach the <strong>30-rep</strong> quota. Losing before 30 reps triggers an emergency respawn; after 30 reps, play continues until impact.</span>
+            </div>
+            <div class="step-box storm">
+              <strong>PHASE 2: SOLAR STORM HOLD</strong>
+              <span>Every ~8–14 reps, PRESS &amp; HOLD continuously for 3.0s to charge your deflector shield.</span>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="primary-btn" id="startMissionBtn">LAUNCH ASSESSMENT</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- End of Mission Biometric Report Modal -->
+      <div class="overlay-backdrop hidden" id="reportOverlay">
+        <div class="modal-card">
+          <span class="modal-tag" id="reportReasonTag">MISSION TELEMETRY COMPLETE</span>
+          <h2>Biometric Assessment Report</h2>
+          <p>Session data compiled and ready for health monitoring database synchronization.</p>
+
+          <div class="report-grid">
+            <div class="report-item">
+              <div class="r-label">Total Grip Squeezes</div>
+              <div class="r-val" id="repTotalReps">0</div>
+            </div>
+            <div class="report-item">
+              <div class="r-label">Isometric Hold Time</div>
+              <div class="r-val" id="repHoldTime">0.0s</div>
+            </div>
+            <div class="report-item">
+              <div class="r-label">Avg Squeeze Rate</div>
+              <div class="r-val" id="repSqueezeRate">0.0 /min</div>
+            </div>
+            <div class="report-item">
+              <div class="r-label">Survival / Score</div>
+              <div class="r-val" id="repSurvivalScore">0.0s | 0</div>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="primary-btn" id="returnToChatBtn" style="background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);">RETURN TO CHAT</button>
+            <button class="secondary-btn" id="restartMissionBtn">RESTART ASSESSMENT</button>
+            <button class="secondary-btn" id="copyJsonBtn">COPY JSON</button>
+          </div>
+          <div class="copy-feedback" id="copyFeedback"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Grip Sensor Input Bar & Hardware Simulation Trigger -->
+    <footer class="sensor-deck">
+      <div class="grip-meter-row">
+        <div class="sensor-status">
+          <span class="status-dot" id="sensorDot"></span>
+          <span id="sensorStateText">GRIP SENSOR: RELEASED</span>
+        </div>
+        <div class="meter-track" title="Real-time Grip Actuator Signal">
+          <div class="meter-fill" id="gripMeterFill"></div>
+        </div>
+      </div>
+
+      <button class="grip-trigger-btn" id="gripTriggerBtn" type="button">
+        <span>⚡ GRIP SENSOR TRIGGER (HOLD SPACEBAR OR PRESS HERE)</span>
+      </button>
+    </footer>
+
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * ASTEROID RUN & SHIELD CHARGE — NASA GRIP HEALTH TELEMETRY ENGINE
+     * ============================================================================
+     * HARDWARE & WEBSITE INTEGRATION GUIDE:
+     * 1. Hardware Input Hooks:
+     *    Call `window.onGripPress()` when your physical grip sensor exceeds your
+     *    threshold (e.g. via Web Serial API, Arduino HID Keyboard, or Bluetooth).
+     *    Call `window.onGripRelease()` when the player relaxes their grip.
+     *
+     * 2. Health Dashboard Data Hook:
+     *    Override or listen to `window.onMissionComplete(telemetryData)` to POST
+     *    the JSON assessment payload directly to your health monitoring backend.
+     * ============================================================================
+     */
+
+    // ----------------------------------------------------------------------------
+    // A. EXTERNAL INTEGRATION CALLBACK (READY FOR YOUR WEBSITE / APP BACKEND)
+    // ----------------------------------------------------------------------------
+    window.onMissionComplete = function(telemetryData) {
+      console.log("[NASA BIO-TELEMETRY] Session Completed:", telemetryData);
+      /*
+       * EXAMPLE BACKEND INTEGRATION:
+       * fetch('/api/astronaut-health/grip-session', {
+       *   method: 'POST',
+       *   headers: { 'Content-Type': 'application/json' },
+       *   body: JSON.stringify(telemetryData)
+       * });
+       */
+    };
+
+    // ----------------------------------------------------------------------------
+    // B. WEB AUDIO SYNTHESIZER (ZERO EXTERNAL SOUND ASSETS REQUIRED)
+    // ----------------------------------------------------------------------------
+    class TelemetryAudio {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playThruster() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(190, now);
+        osc.frequency.exponentialRampToValueAtTime(420, now + 0.11);
+
+        gain.gain.setValueAtTime(0.14, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      }
+
+      playStormWarning() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [0, 0.18].forEach((offset) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(520, now + offset);
+          osc.frequency.setValueAtTime(680, now + offset + 0.08);
+
+          gain.gain.setValueAtTime(0.1, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.15);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.15);
+        });
+      }
+
+      playShieldDeflect() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.25);
+
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.28);
+      }
+
+      playHullImpact() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(32, now + 0.45);
+
+        gain.gain.setValueAtTime(0.24, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.46);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.46);
+      }
+    }
+
+    const audio = new TelemetryAudio();
+
+    // ----------------------------------------------------------------------------
+    // C. DOM REFERENCES & CANVAS SETUP
+    // ----------------------------------------------------------------------------
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const canvasContainer = document.getElementById('canvasContainer');
+
+    // HUD & UI Elements
+    const phaseBadge = document.getElementById('phaseBadge');
+    const muteToggleBtn = document.getElementById('muteToggleBtn');
+    const hudReps = document.getElementById('hudReps');
+    const hudNextStorm = document.getElementById('hudNextStorm');
+    const hudHoldTime = document.getElementById('hudHoldTime');
+    const hudSurvivalTime = document.getElementById('hudSurvivalTime');
+    const hudRepRate = document.getElementById('hudRepRate');
+    const hudScore = document.getElementById('hudScore');
+
+    // Modals & Buttons
+    const startOverlay = document.getElementById('startOverlay');
+    const reportOverlay = document.getElementById('reportOverlay');
+    const startMissionBtn = document.getElementById('startMissionBtn');
+    const restartMissionBtn = document.getElementById('restartMissionBtn');
+    const copyJsonBtn = document.getElementById('copyJsonBtn');
+    const copyFeedback = document.getElementById('copyFeedback');
+    const gripTriggerBtn = document.getElementById('gripTriggerBtn');
+
+    // Sensor Meter Elements
+    const sensorDot = document.getElementById('sensorDot');
+    const sensorStateText = document.getElementById('sensorStateText');
+    const gripMeterFill = document.getElementById('gripMeterFill');
+
+    // Report Modal Fields
+    const reportReasonTag = document.getElementById('reportReasonTag');
+    const repTotalReps = document.getElementById('repTotalReps');
+    const repHoldTime = document.getElementById('repHoldTime');
+    const repSqueezeRate = document.getElementById('repSqueezeRate');
+    const repSurvivalScore = document.getElementById('repSurvivalScore');
+
+    // Logical canvas dimensions (scaled dynamically for crisp Retina/HiDPI rendering)
+    let viewWidth = 960;
+    let viewHeight = 540;
+
+    function resizeCanvas() {
+      const rect = canvasContainer.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      viewWidth = rect.width;
+      viewHeight = rect.height;
+      canvas.width = Math.floor(viewWidth * dpr);
+      canvas.height = Math.floor(viewHeight * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // ----------------------------------------------------------------------------
+    // D. GAME & TELEMETRY STATE
+    // ----------------------------------------------------------------------------
+    const STORM_HOLD_TARGET = 3.0;  // 3.0 seconds continuous grip required to deflect storm
+    const TARGET_REP_GOAL = 30;     // Mandatory astronaut rep quota before game-over is active
+
+    // Computes a dynamic, randomized rep threshold (~8 to 14 squeezes, averaging ~10)
+    // that scales gently with survival progression for natural, engaging pacing.
+    function generateNextStormThreshold(stormsCleared = 0) {
+      const progressionOffset = Math.min(3, Math.floor(stormsCleared * 0.5));
+      const minReps = 8 + progressionOffset;
+      const maxReps = 13 + progressionOffset;
+      return Math.floor(Math.random() * (maxReps - minReps + 1)) + minReps;
+    }
+
+    const state = {
+      status: 'IDLE',               // 'IDLE' | 'PLAYING' | 'GAMEOVER'
+      phase: 'DODGE',               // 'DODGE' | 'STORM_WARNING' | 'STORM_ACTIVE'
+      isGripping: false,
+      gripSignalVisual: 0,          // 0 to 100 smoothed bar fill
+
+      // Health & Biometric Counters
+      reps: 0,
+      respawnsUsed: 0,
+      invulnerableTimer: 0,
+      respawnBannerTimer: 0,
+      repsSinceLastStorm: 0,
+      nextStormThreshold: 10,       // Dynamically randomized per sector
+      totalHoldSeconds: 0,
+      survivalSeconds: 0,
+      score: 0,
+      stormsDeflected: 0,
+      difficultyMultiplier: 1.0,
+      failureReason: '',
+      latestTelemetryJSON: null,
+
+      // Phase 2 Solar Storm State
+      stormWarningTimer: 0,
+      stormHoldProgress: 0,         // 0 to 3.0 seconds
+      stormWaveX: 0,
+      stormTimeLimit: 5.5,          // Total window to complete the 3.0s hold before impact
+      stormElapsed: 0,
+
+      // Spacecraft Physics
+      ship: {
+        x: 150,
+        y: 250,
+        vy: 0,
+        radius: 18
+      },
+
+      // Entities
+      stars: [],
+      asteroids: [],
+      particles: [],
+      asteroidSpawnTimer: 0
+    };
+
+    // ----------------------------------------------------------------------------
+    // E. HARDWARE & INPUT INTERFACE (GRIP SENSOR HOOKS)
+    // ----------------------------------------------------------------------------
+    window.onGripPress = function() {
+      audio.init();
+      if (state.isGripping) return; // Prevent key-repeat double counting
+      state.isGripping = true;
+
+      // Update visual sensor indicators
+      gripTriggerBtn.classList.add('pressed');
+      sensorDot.classList.add('active');
+      sensorStateText.textContent = 'GRIP SENSOR: ENGAGED';
+
+      if (state.status !== 'PLAYING') return;
+
+      if (state.phase === 'DODGE') {
+        // Count dynamic grip repetition
+        state.reps += 1;
+        state.repsSinceLastStorm += 1;
+        state.score += 15;
+
+        // Apply upward thruster impulse
+        state.ship.vy = -310;
+        audio.playThruster();
+        spawnThrusterParticles(state.ship.x - 16, state.ship.y, 12);
+
+        // Check if dynamic sector threshold reached to trigger Phase 2: Solar Storm
+        if (state.repsSinceLastStorm >= state.nextStormThreshold) {
+          triggerSolarStormWarning();
+        }
+      } else if (state.phase === 'STORM_ACTIVE') {
+        // Immediate shield hum feedback
+        audio.playThruster();
+      }
+    };
+
+    window.onGripRelease = function() {
+      state.isGripping = false;
+      gripTriggerBtn.classList.remove('pressed');
+      sensorDot.classList.remove('active');
+      sensorStateText.textContent = 'GRIP SENSOR: RELEASED';
+    };
+
+    // Keyboard Support (Spacebar / ArrowUp simulates physical grip button)
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        if (!e.repeat) {
+          if (state.status === 'IDLE') {
+            startMission();
+          } else {
+            window.onGripPress();
+          }
+        }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        window.onGripRelease();
+      }
+    });
+
+    // Pointer / Touch Support on Trigger Button & Canvas
+    function bindPressRelease(element) {
+      element.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        if (state.status === 'PLAYING') {
+          window.onGripPress();
+        }
+      });
+    }
+
+    bindPressRelease(gripTriggerBtn);
+    bindPressRelease(canvas);
+
+    window.addEventListener('pointerup', () => {
+      if (state.isGripping) window.onGripRelease();
+    });
+    window.addEventListener('pointercancel', () => {
+      if (state.isGripping) window.onGripRelease();
+    });
+
+    // ----------------------------------------------------------------------------
+    // F. MISSION LIFECYCLE & PHASE TRANSITIONS
+    // ----------------------------------------------------------------------------
+    function startMission() {
+      audio.init();
+      resizeCanvas();
+      initStars();
+
+      state.status = 'PLAYING';
+      state.phase = 'DODGE';
+      state.reps = 0;
+      state.respawnsUsed = 0;
+      state.invulnerableTimer = 0;
+      state.respawnBannerTimer = 0;
+      state.repsSinceLastStorm = 0;
+      state.nextStormThreshold = generateNextStormThreshold(0);
+      state.totalHoldSeconds = 0;
+      state.survivalSeconds = 0;
+      state.score = 0;
+      state.stormsDeflected = 0;
+      state.difficultyMultiplier = 1.0;
+      state.failureReason = '';
+
+      state.ship.x = Math.min(160, viewWidth * 0.22);
+      state.ship.y = viewHeight * 0.45;
+      state.ship.vy = 0;
+
+      state.asteroids = [];
+      state.particles = [];
+      state.asteroidSpawnTimer = 0.6;
+
+      startOverlay.classList.add('hidden');
+      reportOverlay.classList.add('hidden');
+      copyFeedback.textContent = '';
+
+      updatePhaseBadge();
+      updateHudDisplay();
+    }
+
+    function triggerSolarStormWarning() {
+      state.phase = 'STORM_WARNING';
+      state.stormWarningTimer = 1.6; // 1.6s alert before wave arrives
+      state.stormHoldProgress = 0;
+      state.stormElapsed = 0;
+      state.stormWaveX = viewWidth + 120;
+      audio.playStormWarning();
+      updatePhaseBadge();
+    }
+
+    function completeSolarStorm() {
+      state.stormsDeflected += 1;
+      state.repsSinceLastStorm = 0;
+      state.nextStormThreshold = generateNextStormThreshold(state.stormsDeflected);
+      state.score += 150;
+      state.difficultyMultiplier = Math.min(1.85, state.difficultyMultiplier + 0.14);
+      state.phase = 'DODGE';
+
+      // Clear remaining asteroids for a clean transition back to flight
+      state.asteroids = [];
+      state.asteroidSpawnTimer = 0.9;
+      state.ship.vy = -120;
+
+      audio.playShieldDeflect();
+      spawnShieldBurstParticles(state.ship.x, state.ship.y);
+      updatePhaseBadge();
+    }
+
+    function triggerEmergencyRespawn(incidentLabel) {
+      state.respawnsUsed += 1;
+      state.invulnerableTimer = 2.4;
+      state.respawnBannerTimer = 2.4;
+      state.phase = 'DODGE';
+      state.stormHoldProgress = 0;
+      state.stormElapsed = 0;
+
+      // Recenter spacecraft and clear immediate hazards
+      state.ship.y = viewHeight * 0.45;
+      state.ship.vy = -140;
+      state.asteroids = [];
+      state.asteroidSpawnTimer = 1.0;
+
+      audio.playHullImpact();
+      spawnExplosionParticles(state.ship.x, state.ship.y);
+      updatePhaseBadge();
+      updateHudDisplay();
+    }
+
+    function endMission(reason) {
+      // Enforce mandatory 30-rep goal: respawn if player fails before hitting TARGET_REP_GOAL
+      if (state.reps < TARGET_REP_GOAL) {
+        triggerEmergencyRespawn(reason);
+        return;
+      }
+
+      state.status = 'GAMEOVER';
+      state.failureReason = reason;
+      window.onGripRelease();
+      audio.playHullImpact();
+      spawnExplosionParticles(state.ship.x, state.ship.y);
+
+      updatePhaseBadge();
+
+      // Compile clean biometric JSON payload for website / health app integration
+      const durationMins = Math.max(state.survivalSeconds / 60, 0.016);
+      const avgRepRate = Number((state.reps / durationMins).toFixed(1));
+
+      const telemetryPayload = {
+        timestamp: new Date().toISOString(),
+        missionStatus: 'COMPLETED',
+        targetRepGoal: TARGET_REP_GOAL,
+        goalAchieved: state.reps >= TARGET_REP_GOAL,
+        terminationCause: reason,
+        metrics: {
+          totalGripReps: state.reps,
+          emergencyRespawnsUsed: state.respawnsUsed,
+          isometricShieldHoldSeconds: Number(state.totalHoldSeconds.toFixed(2)),
+          survivalDurationSeconds: Number(state.survivalSeconds.toFixed(2)),
+          averageSqueezeRatePerMin: avgRepRate,
+          solarStormsDeflected: state.stormsDeflected,
+          telemetryScore: Math.floor(state.score)
+        }
+      };
+
+      state.latestTelemetryJSON = JSON.stringify(telemetryPayload, null, 2);
+
+      // Populate UI Report Modal
+      reportReasonTag.textContent = `${reason} // ${TARGET_REP_GOAL}-REP QUOTA MET`;
+      repTotalReps.textContent = `${state.reps} reps (${state.respawnsUsed} respawns)`;
+      repHoldTime.textContent = `${state.totalHoldSeconds.toFixed(1)}s`;
+      repSqueezeRate.textContent = `${avgRepRate} /min`;
+      repSurvivalScore.textContent = `${state.survivalSeconds.toFixed(1)}s | ${Math.floor(state.score)}`;
+
+      reportOverlay.classList.remove('hidden');
+
+      // Fire external dashboard integration callback
+      if (typeof window.onMissionComplete === 'function') {
+        window.onMissionComplete(telemetryPayload);
+      }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'MISSION_TELEMETRY',
+          telemetry: telemetryPayload
+        }, '*');
+      }
+    }
+
+    // ----------------------------------------------------------------------------
+    // G. PARTICLE & BACKGROUND INITIALIZATION
+    // ----------------------------------------------------------------------------
+    function initStars() {
+      state.stars = [];
+      for (let i = 0; i < 65; i++) {
+        state.stars.push({
+          x: Math.random() * viewWidth,
+          y: Math.random() * viewHeight,
+          size: Math.random() * 1.8 + 0.5,
+          speed: Math.random() * 45 + 15,
+          alpha: Math.random() * 0.7 + 0.2
+        });
+      }
+    }
+
+    function spawnAsteroid() {
+      const radius = Math.random() * 18 + 16;
+      const padding = radius + 24;
+      const y = Math.random() * (viewHeight - padding * 2) + padding;
+      const baseSpeed = (210 + Math.random() * 95) * state.difficultyMultiplier;
+
+      // Create irregular polygon vertices for realistic asteroid silhouette
+      const vertices = [];
+      const vertexCount = 9;
+      for (let i = 0; i < vertexCount; i++) {
+        const angle = (i / vertexCount) * Math.PI * 2;
+        const variance = 0.76 + Math.random() * 0.34;
+        vertices.push({
+          x: Math.cos(angle) * radius * variance,
+          y: Math.sin(angle) * radius * variance
+        });
+      }
+
+      state.asteroids.push({
+        x: viewWidth + radius + 20,
+        y,
+        radius,
+        speed: baseSpeed,
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 2.4,
+        vertices
+      });
+    }
+
+    function spawnThrusterParticles(x, y, count) {
+      for (let i = 0; i < count; i++) {
+        state.particles.push({
+          x,
+          y: y + (Math.random() - 0.5) * 8,
+          vx: -Math.random() * 140 - 60,
+          vy: (Math.random() - 0.5) * 90,
+          life: 0.35 + Math.random() * 0.2,
+          maxLife: 0.55,
+          size: Math.random() * 3.5 + 1.5,
+          color: Math.random() > 0.4 ? '#38bdf8' : '#f59e0b'
+        });
+      }
+    }
+
+    function spawnShieldBurstParticles(x, y) {
+      for (let i = 0; i < 36; i++) {
+        const angle = (i / 36) * Math.PI * 2;
+        const speed = 120 + Math.random() * 180;
+        state.particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 0.65,
+          maxLife: 0.65,
+          size: 3.5,
+          color: '#10b981'
+        });
+      }
+    }
+
+    function spawnExplosionParticles(x, y) {
+      for (let i = 0; i < 42; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 40 + Math.random() * 240;
+        state.particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 0.85,
+          maxLife: 0.85,
+          size: Math.random() * 4 + 2,
+          color: Math.random() > 0.5 ? '#ef4444' : '#f59e0b'
+        });
+      }
+    }
+
+    // ----------------------------------------------------------------------------
+    // H. SIMULATION UPDATE STEP (60 FPS DELTA-TIME LOOP)
+    // ----------------------------------------------------------------------------
+    function update(dt) {
+      // Smooth grip sensor force bar visual
+      const targetSignal = state.isGripping ? 100 : 0;
+      state.gripSignalVisual += (targetSignal - state.gripSignalVisual) * Math.min(1, dt * 18);
+      gripMeterFill.style.width = `${state.gripSignalVisual.toFixed(1)}%`;
+
+      // Update starfield parallax regardless of menu state
+      const starSpeedMult = state.status === 'PLAYING' ? 1.4 : 0.4;
+      for (const star of state.stars) {
+        star.x -= star.speed * starSpeedMult * dt;
+        if (star.x < 0) {
+          star.x = viewWidth;
+          star.y = Math.random() * viewHeight;
+        }
+      }
+
+      // Update particles
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) {
+          state.particles.splice(i, 1);
+        }
+      }
+
+      if (state.status !== 'PLAYING') return;
+
+      // Decrement invulnerability & respawn notification timers
+      if (state.invulnerableTimer > 0) {
+        state.invulnerableTimer = Math.max(0, state.invulnerableTimer - dt);
+      }
+      if (state.respawnBannerTimer > 0) {
+        state.respawnBannerTimer = Math.max(0, state.respawnBannerTimer - dt);
+      }
+
+      // Update survival time & continuous score
+      state.survivalSeconds += dt;
+      state.score += dt * 10;
+
+      // PHASE 1: ASTEROID DODGE (DYNAMIC GRIP REPS)
+      if (state.phase === 'DODGE') {
+        const gravity = 690;
+        state.ship.vy += gravity * dt;
+        state.ship.y += state.ship.vy * dt;
+
+        // Top & bottom hull boundary checks
+        if (state.ship.y - state.ship.radius < 8) {
+          state.ship.y = state.ship.radius + 8;
+          state.ship.vy = 0;
+        }
+        if (state.ship.y + state.ship.radius > viewHeight - 8) {
+          endMission('HULL BREACH: ORBITAL ALTITUDE LOST');
+          return;
+        }
+
+        // Spawn & move asteroids
+        state.asteroidSpawnTimer -= dt;
+        if (state.asteroidSpawnTimer <= 0) {
+          spawnAsteroid();
+          state.asteroidSpawnTimer = Math.max(0.68, (1.35 / state.difficultyMultiplier) + (Math.random() * 0.35));
+        }
+
+        for (let i = state.asteroids.length - 1; i >= 0; i--) {
+          const ast = state.asteroids[i];
+          ast.x -= ast.speed * dt;
+          ast.rotation += ast.rotSpeed * dt;
+
+          // Circle-to-circle collision check (skipped during post-respawn invulnerability)
+          const dx = state.ship.x - ast.x;
+          const dy = state.ship.y - ast.y;
+          const dist = Math.hypot(dx, dy);
+          if (state.invulnerableTimer <= 0 && dist < (state.ship.radius + ast.radius) * 0.82) {
+            endMission('HULL IMPACT: ASTEROID COLLISION');
+            return;
+          }
+
+          if (ast.x + ast.radius < -40) {
+            state.asteroids.splice(i, 1);
+          }
+        }
+      }
+
+      // PHASE 2A: SOLAR STORM WARNING (AUTO-STABILIZING SHIP ALTITUDE)
+      else if (state.phase === 'STORM_WARNING') {
+        // Gently center the spacecraft vertically so player can focus 100% on grip hold
+        const targetY = viewHeight * 0.5;
+        state.ship.y += (targetY - state.ship.y) * Math.min(1, dt * 4);
+        state.ship.vy = 0;
+
+        // Drift remaining asteroids off screen quickly
+        for (let i = state.asteroids.length - 1; i >= 0; i--) {
+          state.asteroids[i].x -= 480 * dt;
+          if (state.asteroids[i].x < -60) state.asteroids.splice(i, 1);
+        }
+
+        state.stormWarningTimer -= dt;
+        if (state.stormWarningTimer <= 0) {
+          state.phase = 'STORM_ACTIVE';
+          updatePhaseBadge();
+        }
+      }
+
+      // PHASE 2B: SOLAR STORM ACTIVE (ISOMETRIC GRIP ENDURANCE HOLD)
+      else if (state.phase === 'STORM_ACTIVE') {
+        const targetY = viewHeight * 0.5;
+        state.ship.y += (targetY - state.ship.y) * Math.min(1, dt * 5);
+        state.stormElapsed += dt;
+
+        // Advance incoming solar radiation wall across viewport
+        const waveProgress = Math.min(1, state.stormElapsed / state.stormTimeLimit);
+        state.stormWaveX = viewWidth - waveProgress * (viewWidth - state.ship.x - 28);
+
+        if (state.isGripping) {
+          state.stormHoldProgress += dt;
+          state.totalHoldSeconds += dt;
+          state.score += dt * 45;
+
+          // Emit shield energy sparks while holding grip
+          if (Math.random() < 0.45) {
+            const angle = (Math.random() - 0.5) * Math.PI;
+            state.particles.push({
+              x: state.ship.x + Math.cos(angle) * 34,
+              y: state.ship.y + Math.sin(angle) * 34,
+              vx: Math.cos(angle) * 40,
+              vy: Math.sin(angle) * 40,
+              life: 0.25,
+              maxLife: 0.25,
+              size: 2.5,
+              color: '#10b981'
+            });
+          }
+
+          if (state.stormHoldProgress >= STORM_HOLD_TARGET) {
+            completeSolarStorm();
+            return;
+          }
+        } else {
+          // Slight shield decay if grip is released mid-storm
+          state.stormHoldProgress = Math.max(0, state.stormHoldProgress - dt * 0.45);
+        }
+
+        // Check if solar radiation wave strikes ship before shield reaches 100%
+        if (state.stormElapsed >= state.stormTimeLimit) {
+          endMission('SHIELD FAILURE: INSUFFICIENT GRIP ENDURANCE');
+          return;
+        }
+      }
+
+      updateHudDisplay();
+    }
+
+    // ----------------------------------------------------------------------------
+    // I. HUD & BADGE HELPERS
+    // ----------------------------------------------------------------------------
+    function updatePhaseBadge() {
+      phaseBadge.classList.remove('storm-alert');
+      if (state.status === 'IDLE') {
+        phaseBadge.textContent = 'STANDBY // READY';
+      } else if (state.status === 'GAMEOVER') {
+        phaseBadge.textContent = 'TELEMETRY LOGGED';
+      } else if (state.phase === 'DODGE') {
+        phaseBadge.textContent = 'PHASE 1: ASTEROID RUN (PULSE)';
+      } else if (state.phase === 'STORM_WARNING') {
+        phaseBadge.textContent = 'ALERT: SOLAR FLARE INBOUND';
+        phaseBadge.classList.add('storm-alert');
+      } else if (state.phase === 'STORM_ACTIVE') {
+        phaseBadge.textContent = 'PHASE 2: HOLD GRIP FOR SHIELD';
+        phaseBadge.classList.add('storm-alert');
+      }
+    }
+
+    function updateHudDisplay() {
+      const goalMet = state.reps >= TARGET_REP_GOAL;
+      hudReps.textContent = goalMet ? `${state.reps} ✓` : `${state.reps} / ${TARGET_REP_GOAL}`;
+      hudReps.classList.toggle('emerald', goalMet);
+      hudReps.classList.toggle('cyan', !goalMet);
+
+      if (state.phase !== 'DODGE') {
+        hudNextStorm.textContent = 'STORM ACTIVE — HOLD GRIP!';
+      } else if (!goalMet) {
+        const remaining = TARGET_REP_GOAL - state.reps;
+        hudNextStorm.textContent = `${remaining} to goal • Respawn ON`;
+      } else {
+        hudNextStorm.textContent = `Goal met! Sudden death mode`;
+      }
+
+      hudHoldTime.textContent = `${state.totalHoldSeconds.toFixed(1)}s`;
+      hudSurvivalTime.textContent = `${state.survivalSeconds.toFixed(1)}s`;
+
+      const mins = Math.max(state.survivalSeconds / 60, 0.016);
+      const rate = (state.reps / mins).toFixed(1);
+      hudRepRate.textContent = `${rate} reps/min`;
+
+      hudScore.textContent = Math.floor(state.score);
+    }
+
+    // ----------------------------------------------------------------------------
+    // J. CANVAS RENDERING PIPELINE
+    // ----------------------------------------------------------------------------
+    function render() {
+      // Deep space background
+      ctx.fillStyle = '#03060f';
+      ctx.fillRect(0, 0, viewWidth, viewHeight);
+
+      // Subtle tactical grid overlay
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.045)';
+      ctx.lineWidth = 1;
+      const gridSize = 48;
+      for (let x = 0; x < viewWidth; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, viewHeight);
+        ctx.stroke();
+      }
+      for (let y = 0; y < viewHeight; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(viewWidth, y);
+        ctx.stroke();
+      }
+
+      // Render Stars
+      for (const star of state.stars) {
+        ctx.fillStyle = `rgba(226, 232, 240, ${star.alpha})`;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Render Asteroids
+      for (const ast of state.asteroids) {
+        ctx.save();
+        ctx.translate(ast.x, ast.y);
+        ctx.rotate(ast.rotation);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ast.vertices.forEach((v, idx) => {
+          if (idx === 0) ctx.moveTo(v.x, v.y);
+          else ctx.lineTo(v.x, v.y);
+        });
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner crater detail
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+        ctx.beginPath();
+        ctx.arc(-ast.radius * 0.25, -ast.radius * 0.15, ast.radius * 0.26, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // Render Incoming Solar Storm Wall & On-Canvas Endurance Gauge
+      if (state.phase === 'STORM_WARNING' || state.phase === 'STORM_ACTIVE') {
+        renderSolarStormOverlay();
+      }
+
+      // Render Particles
+      for (const p of state.particles) {
+        const alpha = Math.max(0, p.life / p.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Render Spacecraft & Deflector Shield
+      if (state.status !== 'GAMEOVER') {
+        renderSpacecraft();
+      }
+
+      // Render Emergency Respawn HUD Notification Banner
+      if (state.respawnBannerTimer > 0 && state.status === 'PLAYING') {
+        const remaining = Math.max(0, TARGET_REP_GOAL - state.reps);
+        ctx.save();
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+        ctx.fillRect(0, viewHeight - 44, viewWidth, 44);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '700 13px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          `EMERGENCY RESPAWN DEPLOYED — ${remaining} REPS REMAINING TO REACH ${TARGET_REP_GOAL}-REP QUOTA`,
+          viewWidth / 2,
+          viewHeight - 17
+        );
+        ctx.restore();
+      }
+    }
+
+    function renderSpacecraft() {
+      const { x, y, vy } = state.ship;
+      ctx.save();
+
+      // Blink spacecraft during post-respawn invulnerability window
+      if (state.invulnerableTimer > 0 && Math.floor(state.invulnerableTimer * 12) % 2 === 0) {
+        ctx.globalAlpha = 0.45;
+      }
+
+      ctx.translate(x, y);
+
+      // Pitch tilt proportional to vertical velocity
+      const tilt = Math.max(-0.38, Math.min(0.38, vy * 0.0011));
+      ctx.rotate(tilt);
+
+      // Engine thruster plume
+      if (state.isGripping || state.status === 'PLAYING') {
+        const flameLen = state.isGripping ? 26 + Math.random() * 10 : 12 + Math.random() * 5;
+        const grad = ctx.createLinearGradient(-16, 0, -16 - flameLen, 0);
+        grad.addColorStop(0, '#38bdf8');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(-14, -6);
+        ctx.lineTo(-14 - flameLen, 0);
+        ctx.lineTo(-14, 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Spacecraft Hull (Sleek NASA Orbital Shuttle silhouette)
+      ctx.fillStyle = '#f8fafc';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(-12, -13);
+      ctx.lineTo(-16, -6);
+      ctx.lineTo(-16, 6);
+      ctx.lineTo(-12, 13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Cockpit Canopy
+      ctx.fillStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.ellipse(4, 0, 8, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      // Render Energy Deflector Shield Ring during Phase 2
+      if (state.phase === 'STORM_ACTIVE' || state.phase === 'STORM_WARNING') {
+        const pct = Math.min(1, state.stormHoldProgress / STORM_HOLD_TARGET);
+        const shieldRadius = 36 + pct * 8;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, shieldRadius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.05, pct));
+        ctx.strokeStyle = state.isGripping ? '#10b981' : '#f59e0b';
+        ctx.lineWidth = 4 + pct * 3;
+        ctx.shadowColor = state.isGripping ? '#10b981' : '#f59e0b';
+        ctx.shadowBlur = 15;
+        ctx.stroke();
+
+        // Translucent forcefield fill
+        if (pct > 0) {
+          ctx.fillStyle = `rgba(16, 185, 129, ${0.08 + pct * 0.22})`;
+          ctx.beginPath();
+          ctx.arc(x, y, shieldRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    function renderSolarStormOverlay() {
+      // Warning banner at top of canvas
+      ctx.save();
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.16)';
+      ctx.fillRect(0, 0, viewWidth, 44);
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '700 13px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      const bannerText = state.phase === 'STORM_WARNING'
+        ? '⚠ SOLAR RADIATION WAVE DETECTED — PREPARE TO HOLD GRIP ⚠'
+        : '⚡ HOLD GRIP SENSOR CONTINUOUSLY TO CHARGE DEFLECTOR SHIELD ⚡';
+      ctx.fillText(bannerText, viewWidth / 2, 27);
+
+      // Render advancing solar radiation wall during active phase
+      if (state.phase === 'STORM_ACTIVE') {
+        const wallGrad = ctx.createLinearGradient(state.stormWaveX, 0, viewWidth, 0);
+        wallGrad.addColorStop(0, 'rgba(245, 158, 11, 0.85)');
+        wallGrad.addColorStop(0.25, 'rgba(239, 68, 68, 0.35)');
+        wallGrad.addColorStop(1, 'rgba(239, 68, 68, 0.12)');
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(state.stormWaveX, 0, viewWidth - state.stormWaveX, viewHeight);
+
+        // Shield Charge Progress Bar right above spacecraft
+        const barW = 140;
+        const barH = 12;
+        const bx = state.ship.x - barW / 2;
+        const by = state.ship.y - 62;
+        const pct = Math.min(1, state.stormHoldProgress / STORM_HOLD_TARGET);
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fillRect(bx, by, barW, barH);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(bx, by, barW, barH);
+
+        ctx.fillStyle = pct >= 1 ? '#10b981' : '#38bdf8';
+        ctx.fillRect(bx + 2, by + 2, (barW - 4) * pct, barH - 4);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '700 11px "JetBrains Mono", monospace';
+        ctx.fillText(`SHIELD: ${Math.round(pct * 100)}%`, state.ship.x, by - 6);
+      }
+      ctx.restore();
+    }
+
+    // ----------------------------------------------------------------------------
+    // K. UI BUTTON LISTENERS & MAIN ANIMATION LOOP
+    // ----------------------------------------------------------------------------
+    startMissionBtn.addEventListener('click', startMission);
+    restartMissionBtn.addEventListener('click', startMission);
+
+    muteToggleBtn.addEventListener('click', () => {
+      audio.muted = !audio.muted;
+      muteToggleBtn.textContent = audio.muted ? 'SFX: OFF' : 'SFX: ON';
+    });
+
+    copyJsonBtn.addEventListener('click', () => {
+      if (!state.latestTelemetryJSON) return;
+      const tempArea = document.createElement('textarea');
+      tempArea.value = state.latestTelemetryJSON;
+      document.body.appendChild(tempArea);
+      tempArea.select();
+      try {
+        document.execCommand('copy');
+        copyFeedback.textContent = '✓ Telemetry JSON copied to clipboard for API testing.';
+      } catch (err) {
+        copyFeedback.textContent = 'Telemetry JSON logged to browser console.';
+      }
+      document.body.removeChild(tempArea);
+    });
+
+    function returnToChat() {
+      let telemetry = null;
+      if (state.latestTelemetryJSON) {
+        try { telemetry = JSON.parse(state.latestTelemetryJSON); } catch (e) {}
+      }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'RETURN_TO_CHAT',
+          telemetry: telemetry
+        }, '*');
+      } else {
+        window.location.href = '/';
+      }
+    }
+
+    const returnToChatBtn = document.getElementById('returnToChatBtn');
+    if (returnToChatBtn) {
+      returnToChatBtn.addEventListener('click', returnToChat);
+    }
+    const headerExitBtn = document.getElementById('headerExitBtn');
+    if (headerExitBtn) {
+      headerExitBtn.addEventListener('click', returnToChat);
+    }
+
+    let lastTimestamp = 0;
+    function gameLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+      lastTimestamp = timestamp;
+
+      update(dt);
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = function() {
+      resizeCanvas();
+      initStars();
+      updatePhaseBadge();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
