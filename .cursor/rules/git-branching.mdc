@@ -1,0 +1,25 @@
+---
+description: Always branch for new work; never ship features on main
+alwaysApply: true
+---
+
+# Git branching
+
+- Before starting a feature, fix, or non-trivial refactor, create a new branch from the latest default branch.
+- Naming:
+  - `feature/<short-kebab-name>`
+  - `fix/<short-kebab-name>`
+  - `chore/<short-kebab-name>`
+- Do not commit feature work directly on `main` / `master`.
+- Do not force-push shared default branches.
+- Keep commits scoped to the branch purpose.
+- Only commit, push, or open a PR when the user asks.
+
+```bash
+# ✅ GOOD
+git checkout -b feature/chat-export
+# work… then commit / PR when asked
+
+# ❌ BAD
+# commit feature changes while still on main
+```

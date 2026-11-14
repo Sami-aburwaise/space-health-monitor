@@ -1,0 +1,12 @@
+---
+description: Local-first health app constraints (chat vitals, no mock data)
+alwaysApply: true
+---
+
+# Local-first health monitor
+
+- Persist chat, vitals, symptoms, settings, and API keys only via `localStorage` (`shm:` keys in `src/lib/storage.ts`).
+- **No manual vitals forms** — extract metrics from chat (`src/lib/extractVitals.ts`) and show them read-only in Vitals History.
+- Do not seed fake vitals, mock charts, or placeholder health readings.
+- Empty states stay minimal (e.g. “No health metrics recorded via chat yet”).
+- Keep clinical charcoal surfaces (`#0A0A0B`, `#111113`, `#222226`) and emerald accents unless the user asks to change the look.

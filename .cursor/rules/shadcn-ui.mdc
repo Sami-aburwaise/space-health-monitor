@@ -1,0 +1,24 @@
+---
+description: Always use shadcn/ui + Lucide for UI work
+alwaysApply: true
+---
+
+# UI library
+
+This project uses **shadcn/ui** (Radix Nova) + **Tailwind CSS v4** + **Lucide**.
+
+- Build UI from `src/components/ui/*` primitives first.
+- Import with `@/components/ui/...` and icons from `lucide-react`.
+- Need a missing primitive? Run `npx shadcn@latest add <name>` — do not hand-roll a parallel button/input/card system.
+- Style with Tailwind utilities and existing theme tokens in `src/index.css`.
+- Do **not** add MUI, Chakra, Ant Design, Bootstrap, or other UI kits.
+
+```tsx
+// ✅ GOOD
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { HeartPulse } from 'lucide-react'
+
+// ❌ BAD
+import Button from '@mui/material/Button'
+```
