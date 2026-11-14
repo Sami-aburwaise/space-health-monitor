@@ -8,6 +8,8 @@ export interface ChatMessage {
   content: string
   createdAt: string
   triageLevel?: TriageLevel
+  /** True when this assistant reply saved vitals extracted from the user's message */
+  loggedVitals?: boolean
 }
 
 export type TriageLevel = 'info' | 'monitor' | 'urgent' | 'emergency'
@@ -44,4 +46,5 @@ export interface AppSettings {
   simulateDelayMs: number
   /** Optional LLM / provider key — stored only in localStorage */
   apiKey: string
+  sidebarCollapsed: boolean
 }

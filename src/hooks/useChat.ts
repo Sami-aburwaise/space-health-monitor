@@ -45,6 +45,7 @@ export function useChat(
         content: reply.content,
         createdAt: new Date().toISOString(),
         triageLevel: reply.triageLevel,
+        loggedVitals: extracted != null,
       }
 
       setMessages((prev) => [...prev, assistantMsg])
