@@ -15,7 +15,7 @@ export default function App() {
   const { settings, update } = useSettings()
   const { vitals, addVitalFromChat, clearVitals } = useVitals()
   const { symptoms, addSymptom, removeSymptom, clearSymptoms } = useSymptoms()
-  const { messages, isTyping, sendMessage, clearChat } = useChat(
+  const { messages, isTyping, sendMessage, clearChat, logGameTelemetry } = useChat(
     vitals,
     symptoms,
     settings.simulateDelayMs,
@@ -50,6 +50,7 @@ export default function App() {
               isTyping={isTyping}
               onSend={sendMessage}
               onClear={clearChat}
+              onLogTelemetry={logGameTelemetry}
             />
           )}
           {view === 'vitals' && <VitalsView vitals={vitals} />}

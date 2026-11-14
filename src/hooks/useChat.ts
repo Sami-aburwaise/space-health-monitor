@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid'
 import { extractVitalsFromText } from '@/lib/extractVitals'
 import { simulateHealthReply } from '@/lib/triage'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
-import type { ChatMessage, SymptomEntry, VitalMetrics, VitalReading } from '@/types/health'
+import type { ChatMessage, GameTelemetryPayload, SymptomEntry, VitalMetrics, VitalReading } from '@/types/health'
 
 export function useChat(
   vitals: VitalReading[],
@@ -45,6 +45,7 @@ export function useChat(
         content: reply.content,
         createdAt: new Date().toISOString(),
         triageLevel: reply.triageLevel,
+        gameAction: reply.gameAction,
       }
 
       setMessages((prev) => [...prev, assistantMsg])
@@ -53,9 +54,24 @@ export function useChat(
     [delayMs, isTyping, onVitalsExtracted, setMessages, symptoms, vitals],
   )
 
+  const logGameTelemetry = useCallback(
+    (telemetry: GameTelemetryPayload) => {
+      const summaryMsg: ChatMessage = {
+        id: uuid(),
+        role: 'assistant',
+        content: `🛰️ **Crew Neuromuscular Assessment Logged**\n\n• **Grip Squeezes**: ${telemetry.metrics.totalGripReps} reps ${telemetry.goalAchieved ? '(30-rep quota achieved ✓)' : ''}\n• **Isometric Hold Time**: ${telemetry.metrics.isometricShieldHoldSeconds}s\n• **Average Squeeze Cadence**: ${telemetry.metrics.averageSqueezeRatePerMin} reps/min\n• **Solar Storms Deflected**: ${telemetry.metrics.solarStormsDeflected}\n• **Session Survival**: ${telemetry.metrics.survivalDurationSeconds}s (Score: ${telemetry.metrics.telemetryScore})\n• **Outcome**: ${telemetry.terminationCause}\n\nNeuromuscular metrics have been logged to your astronaut telemetry history.`,
+        createdAt: new Date().toISOString(),
+        triageLevel: telemetry.goalAchieved ? 'info' : 'monitor',
+        gameTelemetry: telemetry,
+      }
+      setMessages((prev) => [...prev, summaryMsg])
+    },
+    [setMessages],
+  )
+
   const clearChat = useCallback(() => {
     setMessages([])
   }, [setMessages])
 
-  return { messages, isTyping, sendMessage, clearChat }
+  return { messages, isTyping, sendMessage, clearChat, logGameTelemetry }
 }
