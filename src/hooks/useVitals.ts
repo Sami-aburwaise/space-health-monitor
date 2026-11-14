@@ -3,8 +3,8 @@ import { v4 as uuid } from 'uuid'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import type { VitalMetrics, VitalReading } from '@/types/health'
 
-export function useVitals() {
-  const [vitals, setVitals] = useLocalStorage<VitalReading[]>('vitals', [])
+export function useVitals(storageKey = 'vitals') {
+  const [vitals, setVitals] = useLocalStorage<VitalReading[]>(storageKey, [])
 
   const addVitalFromChat = useCallback(
     (metrics: VitalMetrics, recordedAt?: string) => {

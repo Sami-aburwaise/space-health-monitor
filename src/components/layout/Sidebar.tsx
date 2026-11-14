@@ -2,10 +2,9 @@ import {
   Activity,
   HeartPulse,
   MessageSquare,
-  NotebookPen,
   PanelLeftClose,
   PanelLeftOpen,
-  ShieldAlert,
+  Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -15,8 +14,7 @@ import type { AppView } from '@/types/health'
 const NAV: { id: AppView; label: string; shortLabel: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
   { id: 'vitals', label: 'Vitals History', shortLabel: 'Vitals', icon: HeartPulse },
-  { id: 'symptoms', label: 'Symptom Log', shortLabel: 'Symptoms', icon: NotebookPen },
-  { id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: ShieldAlert },
+  { id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings },
 ]
 
 const ACTIVE_ITEM =

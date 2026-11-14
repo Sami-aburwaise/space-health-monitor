@@ -1,16 +1,17 @@
 import * as THREE from 'three'
 
 export type AvatarState = 'idle' | 'thinking' | 'speaking'
-export type AvatarMood = 'neutral' | 'happy' | 'sad'
-export type AvatarEmotion = 'happy' | 'sad' | 'cheering' | 'excited'
+export type AvatarMood = 'neutral' | 'happy' | 'sad' | 'emergency'
+export type AvatarEmotion = 'happy' | 'sad' | 'cheering' | 'excited' | 'emergency'
 
-const EMOTIONS: AvatarEmotion[] = ['happy', 'sad', 'cheering', 'excited']
+const EMOTIONS: AvatarEmotion[] = ['happy', 'sad', 'cheering', 'excited', 'emergency']
 
 const EMOTION_SECONDS: Record<AvatarEmotion, number> = {
   happy: 2.5,
   sad: 2.5,
   cheering: 2.8,
   excited: 2.2,
+  emergency: 4.5,
 }
 
 const COLORS = {
@@ -19,6 +20,7 @@ const COLORS = {
   visor: 0x0a1518,
   glow: 0x2dd4bf,
   sadGlow: 0x60a5fa,
+  emergencyGlow: 0xef4444,
 }
 
 const FRAME_HEIGHT = 3.9
@@ -56,11 +58,14 @@ export class RobotAstronaut {
   private readonly glints: THREE.Mesh[] = []
   private readonly joyEyes: THREE.Group[] = []
   private readonly brows: THREE.Mesh[] = []
-  private readonly mouthCorners: THREE.Mesh[] = []
-  private mouth!: THREE.Mesh
+  private mouthArc!: THREE.Group
+  private mouthOval!: THREE.Mesh
+  private mouthBaseY = 0
 
   private readonly glowColor = new THREE.Color(COLORS.glow)
   private readonly sadColor = new THREE.Color(COLORS.sadGlow)
+  private readonly emergencyColor = new THREE.Color(COLORS.emergencyGlow)
+  private readonly workColor = new THREE.Color(COLORS.glow)
 
   private readonly shellMat = new THREE.MeshStandardMaterial({
     color: COLORS.shell,
@@ -89,8 +94,17 @@ export class RobotAstronaut {
     color: COLORS.glow,
     emissive: COLORS.glow,
     emissiveIntensity: 2,
+    // Frowning mirrors the mouth arc with a negative scale, which flips its winding
+    side: THREE.DoubleSide,
+  })
+  private readonly padMat = new THREE.MeshBasicMaterial({
+    color: COLORS.glow,
+    transparent: true,
+    opacity: 0.45,
+    side: THREE.DoubleSide,
   })
   private readonly glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
+  private rimLight!: THREE.DirectionalLight
 
   private state: AvatarState = 'idle'
   private mood: AvatarMood = 'neutral'
@@ -102,12 +116,15 @@ export class RobotAstronaut {
     sad: 0,
     cheering: 0,
     excited: 0,
+    emergency: 0,
   }
 
   private frameId = 0
   private running = false
   private time = 0
   private mouthOpen = 0
+  private audioLevel = 0
+  private audioLevelAt = -Infinity
   private wordPulse = 0
   private blinkTimer = 2
   private blinkRemaining = 0
@@ -156,6 +173,12 @@ export class RobotAstronaut {
   /** Called on each spoken word boundary to kick the mouth open. */
   pulse() {
     this.wordPulse = 1
+  }
+
+  /** Live speech loudness (0–1) from an audio analyser; takes over from word pulses. */
+  setMouthLevel(level: number) {
+    this.audioLevel = level
+    this.audioLevelAt = this.time
   }
 
   dispose() {
@@ -251,83 +274,124 @@ export class RobotAstronaut {
       sad,
       cheering: cheer,
       excited: excite,
+      emergency: alarm,
     } = this.weights
     const joy = Math.min(1, happy + cheer)
+    // Emergency stays as a held mood, so its jitter only runs while delivering the warning
+    const jolt = alarm * speak
 
-    // Browser speech can't feed an analyser, so the mouth follows word
-    // boundary pulses plus a wobble while speaking.
     this.wordPulse = Math.max(0, this.wordPulse - dt / 0.14)
     let mouthTarget = 0
     if (this.state === 'speaking') {
-      const wobble = 0.3 + 0.25 * Math.sin(t * 17) * Math.sin(t * 5.3)
-      mouthTarget = Math.max(this.wordPulse, wobble)
+      if (t - this.audioLevelAt < 0.25) {
+        mouthTarget = this.audioLevel
+      } else {
+        // Browser speech can't feed an analyser: word pulses plus a babble
+        // that regularly closes fully so it doesn't read as a held-open mouth.
+        const babble = Math.max(0, Math.sin(t * 13) * Math.sin(t * 4.1)) * 0.8
+        mouthTarget = Math.max(this.wordPulse * 0.9, babble)
+      }
+    } else {
+      // Emotions only shape the idle mouth; speech owns it while talking.
+      mouthTarget = Math.max(
+        cheer * (0.55 + 0.2 * Math.sin(t * 9)),
+        excite * (0.35 + 0.15 * Math.sin(t * 16)),
+      )
     }
-    mouthTarget = Math.max(
-      mouthTarget,
-      cheer * (0.55 + 0.2 * Math.sin(t * 9)),
-      excite * (0.35 + 0.15 * Math.sin(t * 16)),
-    )
-    this.mouthOpen = easeTo(this.mouthOpen, mouthTarget, 22, dt)
+    // Snap open fast, close a touch slower, like a jaw
+    const rate = mouthTarget > this.mouthOpen ? 35 : 18
+    this.mouthOpen = easeTo(this.mouthOpen, mouthTarget, rate, dt)
     const mouth = this.mouthOpen
 
-    this.animateFace(dt, { think, speak, happy, sad, cheer, excite, joy, mouth })
+    this.animateFace(dt, { think, speak, happy, sad, cheer, excite, alarm, joy, mouth })
 
-    this.faceMat.emissive.lerpColors(this.glowColor, this.sadColor, sad * 0.8)
-    this.faceMat.color.copy(this.faceMat.emissive)
-    this.faceMat.emissiveIntensity = (2 + mouth * 0.8 + excite * 0.6) * (1 - sad * 0.3)
+    // Teal → blue (sad) → red (emergency) for face + body lights + pad
+    this.workColor.copy(this.glowColor)
+    this.workColor.lerp(this.sadColor, sad * 0.8)
+    this.workColor.lerp(this.emergencyColor, Math.min(1, alarm * 1.05))
+    this.faceMat.emissive.copy(this.workColor)
+    this.faceMat.color.copy(this.workColor)
+    this.glowMat.emissive.copy(this.workColor)
+    this.glowMat.color.copy(this.workColor)
+    this.padMat.color.copy(this.workColor)
+    this.rimLight.color.copy(this.workColor)
+
+    const alarmPulse = 0.55 + 0.45 * Math.abs(Math.sin(t * 8))
+    this.faceMat.emissiveIntensity =
+      (2 + mouth * 0.8 + excite * 0.6 + alarm * 1.4 * alarmPulse) * (1 - sad * 0.25)
     this.glowMat.emissiveIntensity =
       (1.3 +
         Math.sin(t * 2.4) * 0.3 +
         speak * mouth * 0.8 +
         cheer * 0.5 +
-        excite * (0.5 + 0.5 * Math.sin(t * 20)) * 0.8) *
-      (1 - sad * 0.45)
+        excite * (0.5 + 0.5 * Math.sin(t * 20)) * 0.8 +
+        alarm * 1.8 * alarmPulse) *
+      (1 - sad * 0.35)
+    this.padMat.opacity = 0.35 + alarm * 0.35 * alarmPulse
+    this.rimLight.intensity = 1.2 + alarm * 1.6 * alarmPulse
 
-    const float = Math.sin(t * 1.3) * 0.035 * (1 - sad * 0.6)
+    const float = Math.sin(t * 1.3) * 0.035 * (1 - sad * 0.6) * (1 - alarm * 0.4)
     const hop =
       cheer * Math.abs(Math.sin(t * 6)) * 0.28 +
       excite * Math.abs(Math.sin(t * 9)) * 0.12 +
-      happy * Math.abs(Math.sin(t * 2.6)) * 0.03
+      happy * Math.abs(Math.sin(t * 2.6)) * 0.03 +
+      jolt * Math.abs(Math.sin(t * 11)) * 0.06
     this.root.position.y = (float + hop) * motion
-    this.root.rotation.y = -0.22 + excite * Math.sin(t * 7) * 0.08 * motion
+    this.root.rotation.y =
+      -0.22 +
+      excite * Math.sin(t * 7) * 0.08 * motion +
+      jolt * Math.sin(t * 10) * 0.06 * motion
 
     const breathe =
-      Math.sin(t * 2.1) * 0.012 * motion +
+      Math.sin(t * (2.1 + alarm * 1.5)) * (0.012 + alarm * 0.008) * motion +
       speak * mouth * 0.02 +
-      excite * Math.sin(t * 18) * 0.02 * motion -
+      excite * Math.sin(t * 18) * 0.02 * motion +
+      jolt * Math.sin(t * 12) * 0.025 * motion -
       sad * 0.03
     this.body.scale.set(1 - breathe * 0.5, 1 + breathe, 1 - breathe * 0.5)
-    this.body.rotation.x = sad * 0.1
+    this.body.rotation.x = sad * 0.1 + alarm * 0.06
 
     this.head.rotation.y =
-      Math.sin(t * 0.45) * 0.18 * motion * (1 - think) * (1 - sad * 0.5) -
-      0.25 * think +
-      excite * Math.sin(t * 14) * 0.12 * motion
+      Math.sin(t * 0.45) * 0.18 * motion * (1 - think) * (1 - sad * 0.5) +
+      Math.sin(t * 1.4) * 0.22 * think * motion +
+      excite * Math.sin(t * 14) * 0.12 * motion +
+      jolt * Math.sin(t * 9) * 0.1 * motion
     this.head.rotation.z =
       0.16 * think +
       Math.sin(t * 0.7) * 0.03 * motion +
-      happy * Math.sin(t * 2.6) * 0.08 * motion
+      happy * Math.sin(t * 2.6) * 0.08 * motion +
+      jolt * Math.sin(t * 13) * 0.1 * motion
     this.head.rotation.x =
       -0.12 * think +
       speak * Math.sin(t * 7) * 0.05 * mouth * motion +
       sad * 0.28 -
       cheer * 0.18 -
-      excite * 0.06
+      excite * 0.06 +
+      alarm * 0.12
 
     const sway = Math.sin(t * 1.1) * 0.03 * motion
     const gesture = (0.35 + Math.sin(t * 3.2) * 0.25) * speak * motion
-    const shake = Math.sin(t * 20) * 0.35 * excite * motion
+    const shake =
+      Math.sin(t * 20) * 0.35 * excite * motion + Math.sin(t * 16) * 0.2 * jolt * motion
     const pump = Math.sin(t * 12) * 0.25 * motion
 
     this.armRight.rotation.set(
-      lerp(-1.6 * think - gesture * 0.4 + shake, -0.2, cheer),
+      lerp(0.12 * think - gesture * 0.4 + shake - alarm * 0.35, -0.2, cheer),
       0,
-      lerp(0.12 + sway - 0.5 * think + happy * 0.15 - sad * 0.08, 2.85 + pump, cheer),
+      lerp(
+        0.12 + sway + 0.06 * think + happy * 0.15 - sad * 0.08 + alarm * 0.2,
+        2.85 + pump,
+        cheer,
+      ),
     )
     this.armLeft.rotation.set(
-      lerp(-gesture - shake, -0.2, cheer),
+      lerp(0.12 * think - gesture - shake - alarm * 0.35, -0.2, cheer),
       0,
-      lerp(-0.12 - sway - happy * 0.15 + sad * 0.08, -2.85 - pump, cheer),
+      lerp(
+        -0.12 - sway - 0.06 * think - happy * 0.15 + sad * 0.08 - alarm * 0.2,
+        -2.85 - pump,
+        cheer,
+      ),
     )
 
     const kick = Math.sin(t * 12) * 0.25 * cheer * motion
@@ -344,6 +408,7 @@ export class RobotAstronaut {
       sad: number
       cheer: number
       excite: number
+      alarm: number
       joy: number
       mouth: number
     },
@@ -361,12 +426,22 @@ export class RobotAstronaut {
     }
 
     const eyeOpen =
-      blink * (1 - w.think * 0.3) * (1 - w.sad * 0.35) * (1 + w.excite * 0.35)
+      blink *
+      (1 - w.think * 0.3) *
+      (1 - w.sad * 0.35) *
+      (1 + w.excite * 0.35) *
+      (1 + w.alarm * 0.25)
     this.eyes.forEach((eye) => {
-      eye.scale.set(1 + w.excite * 0.2, Math.max(0.001, eyeOpen * (1 - w.joy)), 1)
+      eye.scale.set(
+        1 + w.excite * 0.2 + w.alarm * 0.15,
+        Math.max(0.001, eyeOpen * (1 - w.joy)),
+        1,
+      )
       eye.position.y = eye.userData.baseY - w.sad * 0.025
     })
-    this.glints.forEach((glint) => glint.scale.setScalar(1 + w.excite * 0.8))
+    this.glints.forEach((glint) =>
+      glint.scale.setScalar(1 + w.excite * 0.8 + w.alarm * 0.5),
+    )
     this.joyEyes.forEach((group) => group.scale.setScalar(Math.max(0.001, w.joy)))
 
     this.face.position.set(w.think * 0.05, w.think * 0.04, 0)
@@ -379,17 +454,24 @@ export class RobotAstronaut {
         w.speak * w.mouth * 0.015 +
         w.joy * 0.02 +
         w.excite * 0.04 -
-        w.sad * 0.01
-      brow.rotation.z = side * w.think * 0.22 - side * w.sad * 0.35
+        w.sad * 0.01 +
+        w.alarm * 0.04
+      // Inner-up brows read as worried; outer-up would read as angry
+      brow.rotation.z =
+        side * w.think * 0.22 - side * w.sad * 0.35 - side * w.alarm * 0.3
     })
 
-    this.mouth.scale.set(1 - w.mouth * 0.25, 1 + w.mouth * 2.6, 1)
-    const curve = w.happy * 0.9 + w.cheer + w.excite * 0.7 - w.sad
-    this.mouthCorners.forEach((corner, i) => {
-      const side = i === 0 ? 1 : -1
-      corner.rotation.z = side * curve * 0.55
-      corner.position.y = corner.userData.baseY + curve * 0.02
-    })
+    const curve = 0.35 + w.happy * 0.5 + w.cheer * 0.9 + w.excite * 0.6 - w.sad * 1.1 - w.alarm * 0.5
+    // Keep a minimum bend so the arc never collapses into an invisible sliver
+    const bend = Math.sign(curve || 1) * Math.max(0.3, Math.min(1.3, Math.abs(curve)))
+    this.mouthArc.scale.set(1, bend, 1)
+    this.mouthArc.position.y = this.mouthBaseY - bend * 0.022
+
+    const open = w.mouth
+    const isOpen = open > 0.12
+    this.mouthArc.visible = !isOpen
+    this.mouthOval.visible = isOpen
+    this.mouthOval.scale.set(1 + w.happy * 0.15 - open * 0.2, 0.2 + open * 1.1, 1)
   }
 
   private buildLights() {
@@ -406,9 +488,9 @@ export class RobotAstronaut {
     key.shadow.radius = 4
     this.scene.add(key)
 
-    const rim = new THREE.DirectionalLight(COLORS.glow, 1.2)
-    rim.position.set(-3, 2.5, -3)
-    this.scene.add(rim)
+    this.rimLight = new THREE.DirectionalLight(COLORS.glow, 1.2)
+    this.rimLight.position.set(-3, 2.5, -3)
+    this.scene.add(this.rimLight)
   }
 
   private buildGround() {
@@ -420,15 +502,7 @@ export class RobotAstronaut {
     shadow.receiveShadow = true
     this.scene.add(shadow)
 
-    const pad = new THREE.Mesh(
-      new THREE.RingGeometry(0.82, 0.88, 6),
-      new THREE.MeshBasicMaterial({
-        color: COLORS.glow,
-        transparent: true,
-        opacity: 0.45,
-        side: THREE.DoubleSide,
-      }),
-    )
+    const pad = new THREE.Mesh(new THREE.RingGeometry(0.82, 0.88, 6), this.padMat)
     pad.rotation.x = -Math.PI / 2
     pad.position.y = 0.005
     this.scene.add(pad)
@@ -560,16 +634,24 @@ export class RobotAstronaut {
       this.face.add(eye, joyEye, brow)
     }
 
-    const mouthY = centerY - 0.12
-    this.mouth = this.faceBox(0.16, 0.05, 0, mouthY, 0.645)
-    this.head.add(this.mouth)
+    this.mouthBaseY = centerY - 0.13
+    const arcSpan = Math.PI * 0.6
+    const arc = new THREE.Mesh(
+      new THREE.TorusGeometry(0.11, 0.018, 8, 32, arcSpan),
+      this.faceMat,
+    )
+    // Center the arc's span on the bottom of the circle so +scale.y smiles, -scale.y frowns
+    arc.rotation.z = -Math.PI / 2 - arcSpan / 2
+    arc.position.y = 0.11
+    this.mouthArc = new THREE.Group()
+    this.mouthArc.position.set(0, this.mouthBaseY, 0.645)
+    this.mouthArc.add(arc)
 
-    for (const side of [1, -1] as const) {
-      const corner = this.faceBox(0.08, 0.04, 0.11 * side, mouthY, 0.643)
-      corner.userData.baseY = corner.position.y
-      this.mouthCorners.push(corner)
-      this.head.add(corner)
-    }
+    this.mouthOval = new THREE.Mesh(new THREE.CircleGeometry(0.075, 32), this.faceMat)
+    this.mouthOval.position.set(0, this.mouthBaseY, 0.656)
+    this.mouthOval.visible = false
+
+    this.head.add(this.mouthArc, this.mouthOval)
   }
 
   private faceBox(width: number, height: number, x: number, y: number, z: number) {

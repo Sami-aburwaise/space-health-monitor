@@ -1,5 +1,5 @@
 import { formatExtractedMetrics } from '@/lib/extractVitals'
-import type { ChatMessage, SymptomEntry, TriageLevel, VitalMetrics, VitalReading } from '@/types/health'
+import type { ChatMessage, TriageLevel, VitalMetrics, VitalReading } from '@/types/health'
 
 export function isPlayIntent(text: string): boolean {
   const lower = text.trim().toLowerCase()
@@ -69,16 +69,9 @@ function summarizeVitals(vitals: VitalReading[]): string {
   return `Latest logged vitals — ${formatExtractedMetrics(latest) || 'partial reading'}.`
 }
 
-function summarizeSymptoms(symptoms: SymptomEntry[]): string {
-  if (!symptoms.length) return 'No symptoms logged yet.'
-  const recent = symptoms.slice(0, 3).map((s) => `${s.symptom} (sev ${s.severity}/5)`)
-  return `Recent symptoms: ${recent.join('; ')}.`
-}
-
 export function simulateHealthReply(
   userText: string,
   vitals: VitalReading[],
-  symptoms: SymptomEntry[],
   extracted: VitalMetrics | null,
 ): Pick<ChatMessage, 'content' | 'triageLevel' | 'gameAction'> {
   if (isPlayIntent(userText)) {
@@ -98,11 +91,11 @@ export function simulateHealthReply(
   }
 
   const level = detectLevel(userText)
-  const context = `${summarizeVitals(vitals)} ${summarizeSymptoms(symptoms)}`
+  const context = summarizeVitals(vitals)
 
   const intros: Record<TriageLevel, string> = {
     info:
-      'I reviewed your note against locally stored vitals and symptoms. This is general guidance only — not a diagnosis.',
+      'I reviewed your note against your locally stored vitals. This is general guidance only — not a diagnosis.',
     monitor:
       'Your description suggests something worth watching. Mention updated vitals in chat so trends stay current.',
     urgent:
@@ -130,8 +123,6 @@ export function simulateHealthReply(
     `Local context: ${context}`,
     '',
     `Suggested next step: ${nextSteps[level]}`,
-    '',
-    'Disclaimer: Simulated local triage for hackathon demo. Not medical advice.',
   )
 
   return { content: lines.join('\n'), triageLevel: level }

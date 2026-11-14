@@ -1,53 +1,100 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { Frown, PartyPopper, Smile, Sparkles, Square, Volume2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useSpeech } from '@/hooks/useSpeech'
+import { useAvatarVoice } from '@/hooks/useAvatarVoice'
 import {
   RobotAstronaut,
   type AvatarEmotion,
   type AvatarMood,
 } from '@/lib/avatar/robotAstronaut'
+import { CURRENT_VITALS_WINDOW_MS } from '@/lib/extractVitals'
 import { toSpeakableText } from '@/lib/speech'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/types/health'
 
 const GREETING =
-  "Hi, I'm your Space Health assistant. Tell me your readings in the chat, like your heart rate or blood pressure, and I'll log them for you."
+  "Hi, I'm your Space Health coach. I'll ask for readings and assign harness-compatible equipment exercises for microgravity."
 
-const TEST_PHRASE = 'Speaker test. If you can hear me, audio output is working.'
+function isEmergencyReply(reply: ChatMessage) {
+  return (
+    reply.triageLevel === 'emergency' ||
+    reply.avatarEmotion === 'emergency' ||
+    reply.avatarMood === 'emergency'
+  )
+}
 
-const EMOTION_BUTTONS: { emotion: AvatarEmotion; label: string; icon: typeof Smile }[] = [
-  { emotion: 'happy', label: 'Happy', icon: Smile },
-  { emotion: 'sad', label: 'Sad', icon: Frown },
-  { emotion: 'cheering', label: 'Cheering', icon: PartyPopper },
-  { emotion: 'excited', label: 'Excited', icon: Sparkles },
-]
+function isRecent(reply: ChatMessage) {
+  return Date.now() - new Date(reply.createdAt).getTime() <= CURRENT_VITALS_WINDOW_MS
+}
 
-function moodFor(reply: ChatMessage | undefined): AvatarMood {
+function moodFor(reply: ChatMessage | undefined, critical: boolean): AvatarMood {
+  if (critical) return 'emergency'
   if (!reply) return 'neutral'
-  if (reply.triageLevel === 'urgent' || reply.triageLevel === 'emergency') return 'sad'
+  if (isEmergencyReply(reply)) return isRecent(reply) ? 'emergency' : 'neutral'
+  if (reply.avatarMood) return reply.avatarMood
+  if (reply.triageLevel === 'urgent') return 'sad'
   if (reply.triageLevel === 'info') return 'happy'
   return 'neutral'
+}
+
+function emotionFor(reply: ChatMessage, mood: AvatarMood): AvatarEmotion | null {
+  if (mood === 'emergency') return 'emergency'
+  if (reply.avatarEmotion === 'emergency') return 'sad'
+  if (reply.avatarEmotion) return reply.avatarEmotion
+  if (reply.loggedVitals && mood !== 'sad') return 'cheering'
+  return null
 }
 
 interface AvatarPanelProps {
   messages: ChatMessage[]
   isTyping: boolean
+  /** True while the newest value of any vital is in the critical range */
+  criticalVitals?: boolean
+  elevenLabsApiKey?: string
+  elevenLabsVoiceId?: string
+  autoSpeak?: boolean
+  /** Double-click toggles the guided tour */
+  onToggleDemo?: () => void
+  demoActive?: boolean
+  /** Fired when an auto-spoken reply finishes (or can't be spoken) */
+  onSpeechEnd?: (messageId: string) => void
   className?: string
 }
 
-export function AvatarPanel({ messages, isTyping, className }: AvatarPanelProps) {
+/** Long enough to tell a single click from the first half of a double-click. */
+const CLICK_DELAY_MS = 250
+const NO_VOICE_LINE_MS = 2500
+
+export function AvatarPanel({
+  messages,
+  isTyping,
+  criticalVitals = false,
+  elevenLabsApiKey = '',
+  elevenLabsVoiceId = '',
+  autoSpeak = true,
+  onToggleDemo,
+  demoActive = false,
+  onSpeechEnd,
+  className,
+}: AvatarPanelProps) {
   const stageRef = useRef<HTMLSpanElement>(null)
   const avatarRef = useRef<RobotAstronaut | null>(null)
-  const { supported, speaking, speak, stop } = useSpeech()
+  const { supported, speaking, loading, speak, stop, usingElevenLabs } = useAvatarVoice({
+    elevenLabsApiKey,
+    elevenLabsVoiceId,
+  })
 
   const latestReply = useMemo(
     () => [...messages].reverse().find((m) => m.role === 'assistant'),
     [messages],
   )
-  const mood = moodFor(latestReply)
+  const mood = moodFor(latestReply, criticalVitals)
   const seenReplyId = useRef(latestReply?.id)
+  const seenReplyAt = useRef(latestReply ? new Date(latestReply.createdAt).getTime() : 0)
+  const pendingEmotion = useRef<AvatarEmotion | null>(null)
+  const clickTimer = useRef<number | null>(null)
+  const onSpeechEndRef = useRef(onSpeechEnd)
+  useEffect(() => {
+    onSpeechEndRef.current = onSpeechEnd
+  }, [onSpeechEnd])
 
   useEffect(() => {
     const stage = stageRef.current
@@ -61,8 +108,16 @@ export function AvatarPanel({ messages, isTyping, className }: AvatarPanelProps)
   }, [])
 
   useEffect(() => {
-    avatarRef.current?.setState(speaking ? 'speaking' : isTyping ? 'thinking' : 'idle')
-  }, [speaking, isTyping])
+    if (speaking) {
+      avatarRef.current?.setState('speaking')
+      return
+    }
+    if (loading || isTyping) {
+      avatarRef.current?.setState('thinking')
+      return
+    }
+    avatarRef.current?.setState('idle')
+  }, [speaking, loading, isTyping])
 
   useEffect(() => {
     avatarRef.current?.setMood(mood)
@@ -71,41 +126,98 @@ export function AvatarPanel({ messages, isTyping, className }: AvatarPanelProps)
   useEffect(() => {
     if (!latestReply || latestReply.id === seenReplyId.current) return
     seenReplyId.current = latestReply.id
-    if (latestReply.loggedVitals && mood !== 'sad') {
-      avatarRef.current?.play('cheering')
-    }
-  }, [latestReply, mood])
+    // Only speak replies newer than anything heard — leaving the tour must not replay old chat
+    const at = new Date(latestReply.createdAt).getTime()
+    if (at <= seenReplyAt.current) return
+    seenReplyAt.current = at
 
-  function say(text: string) {
-    speak(text, { onWord: () => avatarRef.current?.pulse() })
+    pendingEmotion.current = emotionFor(latestReply, mood)
+    const replyId = latestReply.id
+    const finished = () => onSpeechEndRef.current?.(replyId)
+
+    if (autoSpeak && supported) {
+      const line = latestReply.speakText || latestReply.content
+      void speak(toSpeakableText(line), {
+        onWord: () => avatarRef.current?.pulse(),
+        onLevel: (level) => avatarRef.current?.setMouthLevel(level),
+        onStart: () => {
+          const emotion = pendingEmotion.current
+          pendingEmotion.current = null
+          if (emotion) avatarRef.current?.play(emotion)
+        },
+        onEnd: finished,
+      })
+    } else {
+      if (pendingEmotion.current) {
+        avatarRef.current?.play(pendingEmotion.current)
+        pendingEmotion.current = null
+      }
+      window.setTimeout(finished, NO_VOICE_LINE_MS)
+    }
+  }, [latestReply, mood, autoSpeak, speak, supported])
+
+  useEffect(
+    () => () => {
+      if (clickTimer.current) window.clearTimeout(clickTimer.current)
+    },
+    [],
+  )
+
+  function handleAvatarDoubleClick() {
+    if (clickTimer.current) {
+      window.clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    stop()
+    onToggleDemo?.()
   }
 
   function handleAvatarClick() {
-    if (speaking) {
+    if (!onToggleDemo) {
+      replayOrStop()
+      return
+    }
+    if (clickTimer.current) window.clearTimeout(clickTimer.current)
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = null
+      replayOrStop()
+    }, CLICK_DELAY_MS)
+  }
+
+  function replayOrStop() {
+    if (demoActive) return
+    if (speaking || loading) {
       stop()
       return
     }
-    avatarRef.current?.play('excited')
-    say(latestReply ? toSpeakableText(latestReply.content) : GREETING)
+    const emotion = latestReply ? emotionFor(latestReply, mood) : 'happy'
+    void speak(
+      latestReply
+        ? toSpeakableText(latestReply.speakText || latestReply.content)
+        : GREETING,
+      {
+        onWord: () => avatarRef.current?.pulse(),
+        onLevel: (level) => avatarRef.current?.setMouthLevel(level),
+        onStart: () => {
+          if (emotion) avatarRef.current?.play(emotion)
+        },
+      },
+    )
   }
 
-  function handleTestSpeaker() {
-    if (speaking) {
-      stop()
-      return
-    }
-    say(TEST_PHRASE)
-  }
-
-  const status = !supported
-    ? 'Voice output is not supported in this browser'
+  const status = demoActive
+    ? 'Tour running — double-click me to stop'
+    : !supported
+    ? 'Add an ElevenLabs key or use a browser with speech synthesis'
     : speaking
-      ? 'Speaking — click to stop'
-      : isTyping
-        ? 'Thinking…'
-        : latestReply
-          ? 'Click me to hear the latest reply'
-          : 'Click me to say hello'
+      ? `Speaking (${usingElevenLabs ? 'ElevenLabs radio' : 'browser'}) — click to stop`
+      : loading
+        ? 'Tuning radio…'
+        : isTyping
+          ? 'Thinking…'
+          : latestReply
+            ? 'Click to replay · double-click for a tour'
+            : 'Click to say hello · double-click for a tour'
 
   return (
     <aside
@@ -124,48 +236,12 @@ export function AvatarPanel({ messages, isTyping, className }: AvatarPanelProps)
       <button
         type="button"
         onClick={handleAvatarClick}
-        disabled={!supported}
+        onDoubleClick={handleAvatarDoubleClick}
         aria-label={speaking ? 'Stop the assistant voice' : 'Hear the assistant speak'}
         className="relative min-h-0 flex-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-inset disabled:cursor-not-allowed"
       >
-        <span ref={stageRef} className="absolute inset-0 block" />
+        <span ref={stageRef} className="absolute inset-0 block origin-center scale-x-[-1]" />
       </button>
-
-      <div className="flex shrink-0 flex-col gap-2 border-t border-[#222226] p-3">
-        <div className="grid grid-cols-4 gap-1.5">
-          {EMOTION_BUTTONS.map(({ emotion, label, icon: Icon }) => (
-            <Tooltip key={emotion}>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label={`Play ${label.toLowerCase()} emotion`}
-                  className="w-full border-[#222226] bg-[#111113] text-zinc-400 hover:border-emerald-500/40 hover:bg-zinc-900 hover:text-emerald-300"
-                  onClick={() => avatarRef.current?.play(emotion)}
-                >
-                  <Icon className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">{label}</TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className={cn(
-            'h-9 w-full border-[#222226] bg-[#111113] text-zinc-300 hover:bg-zinc-900 hover:text-zinc-50',
-            speaking &&
-              'border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-500/10',
-          )}
-          onClick={handleTestSpeaker}
-          disabled={!supported}
-        >
-          {speaking ? <Square data-icon="inline-start" /> : <Volume2 data-icon="inline-start" />}
-          {speaking ? 'Stop' : 'Test speaker'}
-        </Button>
-      </div>
     </aside>
   )
 }

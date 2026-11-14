@@ -24,6 +24,9 @@ export function toSpeakableText(content: string): string {
     text = text.replace(pattern, replacement)
   }
 
+  // Strip markdown bold markers for TTS
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
+
   return text.replace(/\s+,/g, ',').replace(/\s{2,}/g, ' ').trim()
 }
 

@@ -14,4 +14,24 @@ export default defineConfig({
       '@': path.resolve(rootDir, './src'),
     },
   },
+  server: {
+    proxy: {
+      // Browser SPA → upstream APIs (avoids CORS; keys stay in request headers)
+      '/proxy/anthropic': {
+        target: 'https://api.anthropic.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/proxy\/anthropic/, ''),
+      },
+      '/proxy/elevenlabs': {
+        target: 'https://api.elevenlabs.io',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/proxy\/elevenlabs/, ''),
+      },
+      '/proxy/exercise': {
+        target: 'https://api.exerciseapi.dev',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/proxy\/exercise/, ''),
+      },
+    },
+  },
 })

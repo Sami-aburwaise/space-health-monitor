@@ -2,21 +2,24 @@ import { useLocalStorage } from '@/hooks/useLocalStorage'
 import type { AppSettings } from '@/types/health'
 
 const DEFAULTS: AppSettings = {
-  crewName: '',
-  disclaimerAccepted: false,
   simulateDelayMs: 700,
-  apiKey: '',
   sidebarCollapsed: true,
 }
 
 export function useSettings() {
-  const [stored, setSettings] = useLocalStorage<Partial<AppSettings>>('settings', DEFAULTS)
-  const settings: AppSettings = { ...DEFAULTS, ...stored }
+  const [stored, setSettings] = useLocalStorage<Partial<AppSettings>>('settings', {})
+  const settings: AppSettings = {
+    ...DEFAULTS,
+    ...stored,
+    // Strip legacy key fields if they linger in localStorage
+    simulateDelayMs: stored.simulateDelayMs ?? DEFAULTS.simulateDelayMs,
+    sidebarCollapsed: stored.sidebarCollapsed ?? DEFAULTS.sidebarCollapsed,
+  }
 
   return {
     settings,
     setSettings,
     update: (patch: Partial<AppSettings>) =>
-      setSettings((prev) => ({ ...DEFAULTS, ...prev, ...patch })),
+      setSettings((prev) => ({ ...prev, ...patch })),
   }
 }
