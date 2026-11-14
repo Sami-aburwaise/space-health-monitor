@@ -6,6 +6,7 @@ const DEFAULTS: AppSettings = {
   disclaimerAccepted: false,
   simulateDelayMs: 700,
   apiKey: '',
+  sidebarCollapsed: true,
 }
 
 export function useSettings() {
