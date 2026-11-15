@@ -4,14 +4,15 @@ import {
   RobotAstronaut,
   type AvatarEmotion,
   type AvatarMood,
+  type AvatarTool,
 } from '@/lib/avatar/robotAstronaut'
+import { COMPANION_NAME } from '@/lib/coach/identity'
 import { CURRENT_VITALS_WINDOW_MS } from '@/lib/extractVitals'
 import { toSpeakableText } from '@/lib/speech'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/types/health'
 
-const GREETING =
-  "Hi, I'm your Space Health coach. I'll ask for readings and assign harness-compatible equipment exercises for microgravity."
+const GREETING = `Hi! I'm your ${COMPANION_NAME}.`
 
 function isEmergencyReply(reply: ChatMessage) {
   return (
@@ -33,6 +34,17 @@ function moodFor(reply: ChatMessage | undefined, critical: boolean): AvatarMood 
   if (reply.triageLevel === 'urgent') return 'sad'
   if (reply.triageLevel === 'info') return 'happy'
   return 'neutral'
+}
+
+/** The instrument for the newest measure card, so the avatar can show how to use it. */
+function toolFor(reply: ChatMessage | undefined): AvatarTool | null {
+  const kind = reply?.blocks
+    ?.filter((b) => b.type === 'measure_prompt')
+    .map((b) => b.prompt.kind)
+    .pop()
+  if (kind === 'spo2') return 'heart_rate'
+  if (!kind || kind === 'strength') return null
+  return kind
 }
 
 function emotionFor(reply: ChatMessage, mood: AvatarMood): AvatarEmotion | null {
@@ -123,6 +135,11 @@ export function AvatarPanel({
     avatarRef.current?.setMood(mood)
   }, [mood])
 
+  const tool = toolFor(latestReply)
+  useEffect(() => {
+    avatarRef.current?.setTool(tool)
+  }, [tool])
+
   useEffect(() => {
     if (!latestReply || latestReply.id === seenReplyId.current) return
     seenReplyId.current = latestReply.id
@@ -210,7 +227,7 @@ export function AvatarPanel({
     : !supported
     ? 'Add an ElevenLabs key or use a browser with speech synthesis'
     : speaking
-      ? `Speaking (${usingElevenLabs ? 'ElevenLabs radio' : 'browser'}) — click to stop`
+      ? `Speaking (${usingElevenLabs ? 'ElevenLabs' : 'browser voice'}) — click to stop`
       : loading
         ? 'Tuning radio…'
         : isTyping

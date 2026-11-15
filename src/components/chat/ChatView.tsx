@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  ClipboardCheck,
   Gamepad2,
   Play,
   Rocket,
@@ -10,20 +11,31 @@ import {
   Zap,
 } from 'lucide-react'
 import { MessageBlocks } from '@/components/chat/MessageBlocks'
+import { StatusStrip } from '@/components/health/StatusStrip'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
+import { ControllerStatus } from '@/components/hardware/ControllerStatus'
+import { Disclaimer } from '@/components/shared/Disclaimer'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { START_ROUTINE_CMD } from '@/lib/coach/classify'
+import type { ArduinoLinkPhase } from '@/hooks/useArduinoLink'
+import { gameResultKey, parseGameWindowMessage, type NormalizedGameResult } from '@/lib/games/host'
+import type { HallCircuit } from '@/lib/serial/hall'
+import { DAILY_CHECKIN_CMD, START_ROUTINE_CMD } from '@/lib/coach/classify'
+import { readingMessage } from '@/lib/coach/measurePrompts'
+import { SUPPORT_LABELS } from '@/lib/coach/support'
+import { parseCheckinSkip } from '@/lib/coach/vitalReplies'
+import { ENVIRONMENTS } from '@/lib/health/environment'
+import { INDICATORS } from '@/lib/health/indicators'
+import type { OverallStatus } from '@/lib/health/status'
 import { RichText } from '@/lib/markdown'
 import { triageBadgeLabel } from '@/lib/triage'
 import { cn } from '@/lib/utils'
 import type {
   ChatMessage,
   CoachState,
-  GameTelemetryPayload,
-  MeasureKind,
+  MissionEnvironment,
   TriageLevel,
 } from '@/types/health'
 
@@ -35,10 +47,17 @@ const TRIAGE_STYLES: Record<TriageLevel, string> = {
 }
 
 const STRENGTH_GAME_URL = '/games/asteroid-run.html'
-function readingMessage(kind: MeasureKind, value: number): string {
-  if (kind === 'heart_rate') return `My heart rate is ${value} bpm`
-  if (kind === 'temperature') return `My temperature is ${value} C`
-  return `Grip strength reps ${value}`
+
+const COMMAND_LABELS: Record<string, string> = {
+  [START_ROUTINE_CMD]: 'Started routine',
+  [DAILY_CHECKIN_CMD]: 'Started daily check-in',
+  ...SUPPORT_LABELS,
+}
+
+function commandLabel(content: string): string | undefined {
+  const skipped = parseCheckinSkip(content)
+  if (skipped) return `Skip ${INDICATORS[skipped].name.toLowerCase()}`
+  return COMMAND_LABELS[content]
 }
 
 interface ChatViewProps {
@@ -46,9 +65,19 @@ interface ChatViewProps {
   isTyping: boolean
   coachState?: CoachState
   demoActive?: boolean
+  status: OverallStatus
+  environment: MissionEnvironment
   onSend: (text: string) => void
   onClear: () => void
-  onLogTelemetry?: (telemetry: GameTelemetryPayload) => void
+  onOpenStatus?: () => void
+  onGameFinished?: (result: NormalizedGameResult) => void
+  controllerPhase?: ArduinoLinkPhase
+  controllerHall?: HallCircuit | null
+  controllerHallTick?: number
+  /** Live finger-sensor pulse. Null while connected means the sensor sent no beat. */
+  controllerHeartRate?: number | null
+  controllerPort?: string
+  onOpenControllerSettings?: () => void
 }
 
 export function ChatView({
@@ -56,34 +85,87 @@ export function ChatView({
   isTyping,
   coachState,
   demoActive = false,
+  status,
+  environment,
   onSend,
   onClear,
-  onLogTelemetry,
+  onOpenStatus,
+  onGameFinished,
+  controllerPhase = 'idle',
+  controllerHall = null,
+  controllerHallTick = 0,
+  controllerHeartRate = null,
+  controllerPort = '',
+  onOpenControllerSettings,
 }: ChatViewProps) {
   const [draft, setDraft] = useState('')
+  const [emptyHint, setEmptyHint] = useState(false)
   const [activeGameUrl, setActiveGameUrl] = useState<string | null>(null)
+  const [iframeReady, setIframeReady] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const finishedKey = useRef<string | null>(null)
+  const hallTickAtOpen = useRef(0)
+  const onGameFinishedRef = useRef(onGameFinished)
   const empty = messages.length === 0 && !isTyping
+  const showController = controllerPhase === 'open' || controllerPhase === 'connecting' || controllerPhase === 'error'
+
+  useEffect(() => {
+    onGameFinishedRef.current = onGameFinished
+  }, [onGameFinished])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isTyping])
 
+  const closeGame = useCallback(() => {
+    setActiveGameUrl(null)
+    setIframeReady(false)
+    requestAnimationFrame(() => composerRef.current?.focus())
+  }, [])
+
+  function openGame(url: string) {
+    finishedKey.current = null
+    hallTickAtOpen.current = controllerHallTick
+    setIframeReady(false)
+    setActiveGameUrl(url)
+  }
+
   useEffect(() => {
-    function handleMessage(e: MessageEvent) {
-      if (e.data?.type === 'RETURN_TO_CHAT') {
-        setActiveGameUrl(null)
-        if (e.data.telemetry && onLogTelemetry) {
-          onLogTelemetry(e.data.telemetry)
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return
+      const frame = iframeRef.current?.contentWindow
+      if (!frame || event.source !== frame) return
+      const parsed = parseGameWindowMessage(event.data)
+      if (!parsed) return
+      if (parsed.action === 'finish') {
+        const key = gameResultKey(parsed.result)
+        if (finishedKey.current !== key) {
+          finishedKey.current = key
+          onGameFinishedRef.current?.(parsed.result)
         }
       }
+      closeGame()
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [onLogTelemetry])
+  }, [closeGame])
+
+  useEffect(() => {
+    if (!activeGameUrl || !iframeReady || controllerHall === null) return
+    if (controllerHallTick <= hallTickAtOpen.current) return
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'HALL_CHANGE', event: 'hall_change', state: controllerHall },
+      window.location.origin,
+    )
+  }, [activeGameUrl, controllerHall, controllerHallTick, iframeReady])
 
   function submit() {
-    if (!draft.trim()) return
+    if (!draft.trim()) {
+      setEmptyHint(true)
+      return
+    }
     onSend(draft)
     setDraft('')
   }
@@ -92,15 +174,29 @@ export function ChatView({
     onSend(START_ROUTINE_CMD)
   }
 
+  const env = ENVIRONMENTS[environment]
+  const due = status.notMeasured.map((id) => INDICATORS[id].name.toLowerCase())
+
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-[#0A0A0B]">
       <header className="flex items-center justify-between border-b border-[#222226] px-4 py-3 md:px-6">
-        <div>
-          <h1 className="text-base font-medium tracking-tight text-zinc-100">Health Chat</h1>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-base font-medium tracking-tight text-zinc-100">Health Chat</h1>
+            {showController && (
+              <ControllerStatus
+                compact
+                phase={controllerPhase}
+                hall={controllerHall}
+                heartRate={controllerHeartRate}
+                portLabel={controllerPort}
+              />
+            )}
+          </div>
           <p className="text-xs text-zinc-500">
             {demoActive
-              ? 'Guided tour · sample readings are not saved'
-              : `Micro-g coach · station gear assigned automatically${
+              ? 'Guided tour · nothing is recorded'
+              : `${env.label} · ${env.gravity} · comms ${env.commsDelay.toLowerCase()}${
                   coachState && coachState !== 'idle' ? ` · ${coachState}` : ''
                 }`}
           </p>
@@ -118,6 +214,8 @@ export function ChatView({
         </Button>
       </header>
 
+      {!demoActive && <StatusStrip status={status} onOpen={onOpenStatus} />}
+
       <ScrollArea className="min-h-0 flex-1 px-4 py-4 md:px-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {empty ? (
@@ -128,24 +226,47 @@ export function ChatView({
                   <Zap className="size-4" />
                 </div>
               }
-              title="Ready for today's routine"
-              description="Station cable, bands, machine, and strapped weights are already assigned. Start when you are suited up."
+              title="How are you today?"
+              description={
+                due.length > 0
+                  ? `Due today: ${due.join(', ')}. Run the daily check-in, or start your workout.`
+                  : 'All six indicators are logged for today. Start your workout when you are ready.'
+              }
               actions={
-                <Button
-                  type="button"
-                  size="lg"
-                  className="mt-1 bg-emerald-500 px-6 text-emerald-950 shadow-md shadow-emerald-500/20 hover:bg-emerald-400"
-                  disabled={isTyping}
-                  onClick={startRoutine}
-                >
-                  <Zap data-icon="inline-start" />
-                  Start routine
-                </Button>
+                <div className="mt-1 flex flex-wrap justify-center gap-2">
+                  {due.length > 0 && (
+                    <Button
+                      type="button"
+                      size="lg"
+                      className="bg-emerald-500 px-5 text-emerald-950 shadow-md shadow-emerald-500/20 hover:bg-emerald-400"
+                      disabled={isTyping}
+                      onClick={() => onSend(DAILY_CHECKIN_CMD)}
+                    >
+                      <ClipboardCheck data-icon="inline-start" />
+                      Daily check-in
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant={due.length > 0 ? 'outline' : 'default'}
+                    className={
+                      due.length > 0
+                        ? 'border-[#222226] bg-[#0A0A0B] px-5 text-zinc-200 hover:bg-zinc-900'
+                        : 'bg-emerald-500 px-5 text-emerald-950 shadow-md shadow-emerald-500/20 hover:bg-emerald-400'
+                    }
+                    disabled={isTyping}
+                    onClick={startRoutine}
+                  >
+                    <Zap data-icon="inline-start" />
+                    Start workout
+                  </Button>
+                </div>
               }
             />
           ) : (
             messages.map((m, idx) => {
-              const isStartCmd = m.content === START_ROUTINE_CMD
+              const label = commandLabel(m.content)
               const isLatest = idx === messages.length - 1
               return (
                 <div
@@ -166,15 +287,23 @@ export function ChatView({
                     {m.role === 'assistant' && m.blocks && m.blocks.length > 0 ? (
                       <MessageBlocks
                         blocks={m.blocks}
-                        onSubmitReading={(kind, value) => onSend(readingMessage(kind, value))}
-                        onLaunchStrengthGame={() => setActiveGameUrl(STRENGTH_GAME_URL)}
+                        onSubmitReading={
+                          demoActive ? undefined : (kind, value) => onSend(readingMessage(kind, value))
+                        }
+                        onLaunchStrengthGame={() => openGame(STRENGTH_GAME_URL)}
                         onExerciseDone={
                           isLatest && !isTyping && !demoActive ? () => onSend('Done') : undefined
+                        }
+                        onChoose={isLatest && !isTyping && !demoActive ? onSend : undefined}
+                        sensorLive={controllerPhase === 'open'}
+                        sensorHeartRate={controllerHeartRate}
+                        onOpenControllerSettings={
+                          demoActive ? undefined : onOpenControllerSettings
                         }
                       />
                     ) : (
                       <RichText
-                        text={isStartCmd ? 'Started routine' : m.content}
+                        text={label ?? m.content}
                         className={
                           m.role === 'user' ? 'text-emerald-950 [&_strong]:text-emerald-950' : undefined
                         }
@@ -185,11 +314,11 @@ export function ChatView({
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={() => setActiveGameUrl(m.gameAction!.url)}
+                        onClick={() => openGame(m.gameAction!.url)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            setActiveGameUrl(m.gameAction!.url)
+                            openGame(m.gameAction!.url)
                           }
                         }}
                         className="group mt-3 flex cursor-pointer flex-col gap-2.5 overflow-hidden rounded-xl border border-sky-500/30 bg-gradient-to-b from-[#0b132b] to-[#070b18] p-3.5 text-left transition hover:border-sky-400 hover:shadow-lg hover:shadow-sky-500/15 focus:outline-none focus:ring-2 focus:ring-sky-400"
@@ -200,7 +329,7 @@ export function ChatView({
                               <Gamepad2 className="size-4" />
                             </span>
                             <span className="font-mono text-[11px] font-semibold tracking-wider text-sky-400">
-                              {m.gameAction.badge || 'NASA BIO-SYS // CREW EXERCISE'}
+                              {m.gameAction.badge || 'FITNESS GAME'}
                             </span>
                           </div>
                           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] font-medium text-emerald-300">
@@ -221,7 +350,7 @@ export function ChatView({
                           className="mt-1 w-full bg-gradient-to-r from-sky-500 to-blue-600 font-mono text-xs font-semibold tracking-wider text-white uppercase shadow-md shadow-sky-500/25"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setActiveGameUrl(m.gameAction!.url)
+                            openGame(m.gameAction!.url)
                           }}
                         >
                           <Play className="mr-1.5 size-3.5 fill-current" />
@@ -260,13 +389,24 @@ export function ChatView({
       </ScrollArea>
 
       <div className="border-t border-[#222226] bg-[#0A0A0B] p-4 md:px-6">
+        {emptyHint && !draft.trim() && (
+          <p role="alert" className="mx-auto mb-2 max-w-2xl text-xs text-amber-300">
+            Type a message first, for example “My heart rate is 72 bpm” or “I slept 7 hours”.
+          </p>
+        )}
         <div className="mx-auto flex max-w-2xl gap-2">
           <Textarea
+            ref={composerRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setEmptyHint(false)
+            }}
             disabled={demoActive}
             placeholder={
-              demoActive ? 'Tour in progress…' : 'Optional note — use measure bubbles for readings…'
+              demoActive
+                ? 'Tour in progress…'
+                : 'Tell me a reading or how you feel, e.g. “BP 118/76” or “I slept 6 hours”'
             }
             className="min-h-[44px] max-h-32 resize-none border-[#222226] bg-[#111113] text-zinc-50 placeholder:text-zinc-600 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/30"
             rows={2}
@@ -281,48 +421,71 @@ export function ChatView({
             type="button"
             size="icon-lg"
             className="shrink-0 self-end bg-emerald-500 text-emerald-950 shadow-md shadow-emerald-500/20 hover:bg-emerald-400"
-            disabled={!draft.trim() || isTyping || demoActive}
+            disabled={isTyping || demoActive}
             onClick={submit}
             aria-label="Send message"
           >
             <SendHorizontal />
           </Button>
         </div>
+        <Disclaimer className="mx-auto mt-2 max-w-2xl" />
       </div>
 
       {activeGameUrl && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#050914] md:absolute">
-          <div className="flex items-center justify-between border-b border-[#222226] bg-[#0b132b]/95 px-4 py-3 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-7 items-center justify-center rounded-md border border-sky-500/40 bg-sky-500/15 text-sky-400">
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-[#050914] md:absolute"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Asteroid Run and Shield Charge"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-[#222226] bg-[#0b132b]/95 px-4 py-3 shadow-lg backdrop-blur-md">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-sky-500/40 bg-sky-500/15 text-sky-400">
                 <Rocket className="size-4" />
               </span>
-              <div>
-                <h2 className="text-sm font-semibold tracking-wide text-zinc-100">
+              <div className="min-w-0">
+                <h2 className="truncate text-sm font-semibold tracking-wide text-zinc-100">
                   Asteroid Run &amp; Shield Charge
                 </h2>
-                <p className="font-mono text-[11px] text-sky-400/80">
-                  ASTRONAUT NEUROMUSCULAR &amp; GRIP ASSESSMENT
+                <p className="truncate font-mono text-[11px] text-sky-400/80">
+                  GRIP FITNESS GAME · NOT A MEDICAL TEST
                 </p>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="border-sky-500/40 bg-[#111c3d] font-mono text-xs font-semibold text-sky-300 transition hover:bg-sky-500/25 hover:text-white"
-              onClick={() => setActiveGameUrl(null)}
-            >
-              <ArrowLeft className="mr-1.5 size-3.5" />
-              Return to Chat
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              {showController && (
+                <ControllerStatus
+                  compact
+                  phase={controllerPhase}
+                  hall={controllerHall}
+                  heartRate={controllerHeartRate}
+                  portLabel={controllerPort}
+                />
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-sky-500/40 bg-[#111c3d] font-mono text-xs font-semibold text-sky-300 transition hover:bg-sky-500/25 hover:text-white"
+                onClick={closeGame}
+              >
+                <ArrowLeft className="mr-1.5 size-3.5" />
+                Return to Chat
+              </Button>
+            </div>
           </div>
           <div className="relative size-full flex-1 bg-[#03060f]">
             <iframe
+              ref={iframeRef}
               src={activeGameUrl}
               title="Asteroid Run & Shield Charge"
               className="size-full border-none"
               allow="autoplay"
+              tabIndex={0}
+              onLoad={() => {
+                setIframeReady(true)
+                iframeRef.current?.focus()
+              }}
             />
           </div>
         </div>

@@ -1,5 +1,6 @@
 import {
   Activity,
+  BookOpen,
   HeartPulse,
   MessageSquare,
   PanelLeftClose,
@@ -13,7 +14,8 @@ import type { AppView } from '@/types/health'
 
 const NAV: { id: AppView; label: string; shortLabel: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
-  { id: 'vitals', label: 'Vitals History', shortLabel: 'Vitals', icon: HeartPulse },
+  { id: 'vitals', label: 'Health Status', shortLabel: 'Status', icon: HeartPulse },
+  { id: 'sources', label: 'About & Sources', shortLabel: 'Sources', icon: BookOpen },
   { id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings },
 ]
 

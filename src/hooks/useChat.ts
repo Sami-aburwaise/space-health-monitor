@@ -3,23 +3,36 @@ import { v4 as uuid } from 'uuid'
 import { runCoachTurn, startRoutineLocal } from '@/lib/coach/agent'
 import { classifyMessage, isWorkoutContinue } from '@/lib/coach/classify'
 import { buildNextExerciseTurn, withNextExerciseAttached } from '@/lib/coach/nextExercise'
+import { measurePrompt } from '@/lib/coach/measurePrompts'
 import { prefetchRoutine } from '@/lib/coach/prescribe'
-import { buildVitalReply, canReplyLocally } from '@/lib/coach/vitalReplies'
+import { buildOfflineSupport, buildSupportReply, supportCommand } from '@/lib/coach/support'
+import {
+  buildCheckinSkip,
+  buildDailyCheckIn,
+  buildWorkoutStart,
+  buildRejectionReply,
+  buildVitalReply,
+  buildWorkoutHold,
+  canReplyLocally,
+  parseCheckinSkip,
+  type VitalReply,
+} from '@/lib/coach/vitalReplies'
 import {
   getClaudeApiKey,
   getExerciseApiKey,
 } from '@/lib/env'
 import {
   currentVitals,
-  extractVitalsFromText,
   isCriticalVitals,
+  parseReadings,
 } from '@/lib/extractVitals'
+import { buildGameCommentary, type NormalizedGameResult } from '@/lib/games/host'
 import { simulateHealthReply } from '@/lib/triage'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import type {
   ChatMessage,
   CoachState,
-  GameTelemetryPayload,
+  MissionEnvironment,
   VitalMetrics,
   VitalReading,
 } from '@/types/health'
@@ -32,10 +45,34 @@ export function useChat(
   routineSlot: number,
   onCoachState: (state: CoachState, routineSlot?: number) => void,
   onVitalsExtracted: (metrics: VitalMetrics) => VitalReading,
+  environment: MissionEnvironment,
   storageKey = 'chat',
 ) {
   const [messages, setMessages] = useLocalStorage<ChatMessage[]>(storageKey, [])
   const [isTyping, setIsTyping] = useState(false)
+
+  const pushLocalTurn = useCallback(
+    (turn: VitalReply) => {
+      onCoachState(turn.coachState, turn.routineSlot)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uuid(),
+          role: 'assistant',
+          content: turn.content,
+          createdAt: new Date().toISOString(),
+          triageLevel: turn.triageLevel,
+          loggedVitals: turn.loggedVitals,
+          blocks: turn.blocks,
+          avatarEmotion: turn.avatarEmotion,
+          avatarMood: turn.avatarMood,
+          speakText: turn.speakText,
+          coachState: turn.coachState,
+        },
+      ])
+    },
+    [onCoachState, setMessages],
+  )
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -52,7 +89,21 @@ export function useChat(
       setMessages((prev) => [...prev, userMsg])
       setIsTyping(true)
 
-      const extracted = extractVitalsFromText(trimmed)
+      const support = supportCommand(trimmed)
+      const skipped = parseCheckinSkip(trimmed)
+      if (support || skipped) {
+        await new Promise((r) => setTimeout(r, Math.min(simulateDelayMs, 400)))
+        pushLocalTurn(
+          support
+            ? buildSupportReply(support, environment, coachState)
+            : buildCheckinSkip(skipped!, vitals),
+        )
+        setIsTyping(false)
+        return
+      }
+
+      const parsed = parseReadings(trimmed)
+      const extracted = parsed.metrics
       let nextVitals = vitals
       if (extracted) {
         const saved = onVitalsExtracted(extracted)
@@ -78,34 +129,63 @@ export function useChat(
               crewName,
               exerciseApiKey: getExerciseApiKey(),
               routineSlot,
+              environment,
+              readings: nextVitals,
             },
+            parsed.rejected,
           )
           if (turn) {
-            onCoachState(turn.coachState, turn.routineSlot)
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: uuid(),
-                role: 'assistant',
-                content: turn.content,
-                createdAt: new Date().toISOString(),
-                triageLevel: turn.triageLevel,
-                loggedVitals: turn.loggedVitals,
-                blocks: turn.blocks,
-                avatarEmotion: turn.avatarEmotion,
-                avatarMood: turn.avatarMood,
-                speakText: turn.speakText,
-                coachState: turn.coachState,
-              },
-            ])
+            pushLocalTurn(turn)
             return
           }
         }
 
-        // Start routine, "done", and mid-workout "ok/ready/where is it" stay local
+        if (parsed.rejected.length > 0) {
+          await new Promise((r) => setTimeout(r, simulateDelayMs))
+          pushLocalTurn(buildRejectionReply(parsed.rejected, parsed.rejectedKinds, coachState))
+          return
+        }
+
+        // Start routine, daily check-in, "done", and mid-workout "ok/ready/where is it" stay local
         const intent = classifyMessage(trimmed)
+        if (intent === 'play_game') {
+          const reply = simulateHealthReply(trimmed, nextVitals, null)
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              role: 'assistant',
+              content: reply.content,
+              createdAt: new Date().toISOString(),
+              triageLevel: reply.triageLevel,
+              gameAction: reply.gameAction,
+              blocks: [{ type: 'text', text: reply.content }],
+              avatarEmotion: 'excited',
+              avatarMood: 'happy',
+              speakText: 'Asteroid Run is ready when you are. It is a fitness game, not a medical test.',
+            },
+          ])
+          return
+        }
+        if (intent === 'daily_checkin') {
+          pushLocalTurn(buildDailyCheckIn(nextVitals, coachState))
+          return
+        }
         const midWorkout = coachState === 'coach_set' || coachState === 'prescribe_exercise'
         const continueWorkout = midWorkout && isWorkoutContinue(trimmed)
+        const hold =
+          intent === 'exercise_done' || continueWorkout ? buildWorkoutHold(nextVitals) : null
+        if (hold) {
+          pushLocalTurn(hold)
+          return
+        }
+        if (intent === 'start_routine') {
+          const ready = await buildWorkoutStart(nextVitals, crewName, getExerciseApiKey())
+          if (ready) {
+            pushLocalTurn(ready)
+            return
+          }
+        }
         if (intent === 'start_routine' || intent === 'exercise_done' || continueWorkout) {
           // Warm exercise cache while the crew logs temp + HR
           if (intent === 'start_routine') prefetchRoutine(crewName, getExerciseApiKey())
@@ -144,6 +224,7 @@ export function useChat(
             crewName,
             coachState,
             routineSlot,
+            environment,
             vitals: nextVitals,
             history: [...messages, userMsg],
             userText: trimmed,
@@ -179,6 +260,11 @@ export function useChat(
           ])
         } else {
           await new Promise((r) => setTimeout(r, simulateDelayMs))
+          const offlineSupport = buildOfflineSupport(trimmed, coachState)
+          if (offlineSupport) {
+            pushLocalTurn(offlineSupport)
+            return
+          }
           const reply = simulateHealthReply(trimmed, nextVitals, extracted)
           setMessages((prev) => [
             ...prev,
@@ -233,10 +319,12 @@ export function useChat(
     [
       coachState,
       crewName,
+      environment,
       isTyping,
       messages,
       onCoachState,
       onVitalsExtracted,
+      pushLocalTurn,
       routineSlot,
       setMessages,
       simulateDelayMs,
@@ -244,38 +332,31 @@ export function useChat(
     ],
   )
 
-  const logGameTelemetry = useCallback(
-    (telemetry: GameTelemetryPayload) => {
+  const logGameResult = useCallback(
+    (result: NormalizedGameResult): string | null => {
+      const commentary = buildGameCommentary(result)
+      if (!commentary) return null
       const summaryMsg: ChatMessage = {
         id: uuid(),
         role: 'assistant',
-        content: `🛰️ **Crew Neuromuscular Assessment Logged**\n\n• **Grip Squeezes**: ${telemetry.metrics.totalGripReps} reps ${telemetry.goalAchieved ? '(30-rep quota achieved ✓)' : ''}\n• **Isometric Hold Time**: ${telemetry.metrics.isometricShieldHoldSeconds}s\n• **Average Squeeze Cadence**: ${telemetry.metrics.averageSqueezeRatePerMin} reps/min\n• **Solar Storms Deflected**: ${telemetry.metrics.solarStormsDeflected}\n• **Session Survival**: ${telemetry.metrics.survivalDurationSeconds}s (Score: ${telemetry.metrics.telemetryScore})\n• **Outcome**: ${telemetry.terminationCause}\n\nNeuromuscular metrics have been logged to your astronaut telemetry history.`,
+        content: commentary.display,
         createdAt: new Date().toISOString(),
-        triageLevel: telemetry.goalAchieved ? 'info' : 'monitor',
-        gameTelemetry: telemetry,
-        avatarEmotion: telemetry.goalAchieved ? 'cheering' : 'excited',
-        avatarMood: 'happy',
-        speakText: telemetry.goalAchieved
-          ? 'Strength quota achieved. Great work, crew.'
-          : 'Strength session logged. We can run another test when you are ready.',
+        triageLevel: commentary.triageLevel,
+        gameTelemetry: result.telemetry ?? undefined,
+        avatarEmotion: commentary.avatarEmotion,
+        avatarMood: commentary.avatarMood,
+        speakText: commentary.speakText,
         blocks: [
-          {
-            type: 'text',
-            text: `Grip assessment logged: ${telemetry.metrics.totalGripReps} reps, score ${telemetry.metrics.telemetryScore}.`,
-          },
-          {
-            type: 'measure_prompt',
-            prompt: {
-              kind: 'heart_rate',
-              title: 'Post-strength heart rate',
-              hint: 'Log your pulse after the grip assessment.',
-              starterText: 'My heart rate is ',
-            },
-          },
+          { type: 'text', text: commentary.display },
+          measurePrompt('heart_rate', {
+            title: 'Post-game heart rate',
+            hint: 'Log your pulse after the grip game.',
+          }),
         ],
       }
       setMessages((prev) => [...prev, summaryMsg])
       onCoachState('measure_hr')
+      return commentary.speakText
     },
     [onCoachState, setMessages],
   )
@@ -284,5 +365,5 @@ export function useChat(
     setMessages([])
   }, [setMessages])
 
-  return { messages, isTyping, sendMessage, clearChat, logGameTelemetry }
+  return { messages, isTyping, sendMessage, clearChat, logGameResult }
 }

@@ -941,6 +941,20 @@
       }
     });
 
+    // Parent chat forwards the Arduino hall sensor. 0 = closed / squeeze, 1 = opened / release.
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== 'HALL_CHANGE') return;
+      const circuit = Number(data.state);
+      if (circuit === 0) {
+        if (state.status === 'IDLE' || state.status === 'GAMEOVER') startMission();
+        else window.onGripPress();
+      } else if (circuit === 1) {
+        window.onGripRelease();
+      }
+    });
+
     // Pointer / Touch Support on Trigger Button & Canvas
     function bindPressRelease(element) {
       element.addEventListener('pointerdown', (e) => {
@@ -1102,9 +1116,11 @@
       }
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({
-          type: 'MISSION_TELEMETRY',
+          type: 'GAME_FINISHED',
+          score: Math.floor(state.score),
+          status: state.reps >= TARGET_REP_GOAL ? 'won' : 'lost',
           telemetry: telemetryPayload
-        }, '*');
+        }, window.location.origin);
       }
     }
 
@@ -1659,12 +1675,20 @@
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({
           type: 'RETURN_TO_CHAT',
+          score: telemetry && telemetry.metrics ? telemetry.metrics.telemetryScore : undefined,
+          status: telemetry && telemetry.goalAchieved ? 'won' : 'finished',
           telemetry: telemetry
-        }, '*');
+        }, window.location.origin);
       } else {
         window.location.href = '/';
       }
     }
+
+    window.addEventListener('pagehide', () => {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'GAME_CLOSED' }, window.location.origin);
+      }
+    });
 
     const returnToChatBtn = document.getElementById('returnToChatBtn');
     if (returnToChatBtn) {

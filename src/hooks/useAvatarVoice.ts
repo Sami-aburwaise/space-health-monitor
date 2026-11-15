@@ -38,6 +38,7 @@ export function useAvatarVoice({
   const browserSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
   const [speaking, setSpeaking] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [voiceSource, setVoiceSource] = useState<'elevenlabs' | 'browser' | null>(null)
   const sessionRef = useRef(0)
   const radioRef = useRef<RadioPlayHandles | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -51,6 +52,7 @@ export function useAvatarVoice({
     if (browserSupported) window.speechSynthesis.cancel()
     setSpeaking(false)
     setLoading(false)
+    setVoiceSource(null)
   }, [browserSupported])
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export function useAvatarVoice({
 
       window.speechSynthesis.cancel()
       setLoading(false)
+      setVoiceSource('browser')
       const lang = ARABIC.test(text) ? 'ar' : 'en'
       const voice = pickVoice(lang)
       const isCurrent = () => sessionRef.current === session
@@ -140,6 +143,7 @@ export function useAvatarVoice({
             onStart: () => {
               if (sessionRef.current !== session) return
               setLoading(false)
+              setVoiceSource('elevenlabs')
               setSpeaking(true)
               opts.onStart?.()
             },
@@ -182,6 +186,6 @@ export function useAvatarVoice({
     loading,
     speak,
     stop,
-    usingElevenLabs: Boolean(elevenLabsApiKey.trim()),
+    usingElevenLabs: voiceSource === 'elevenlabs',
   }
 }

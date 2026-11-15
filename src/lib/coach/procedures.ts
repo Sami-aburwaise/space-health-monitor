@@ -1,7 +1,8 @@
+import { CRITICAL } from '@/lib/extractVitals'
 import type { MeasureKind, VitalMetrics } from '@/types/health'
 
 export interface EmergencyProcedure {
-  /** Short condition name shown as the card title, e.g. "Hyperthermia" */
+  /** Short condition name shown as the card title, e.g. "High temperature" */
   condition: string
   /** Reading that triggered it, e.g. "Temp 40°C" */
   reading: string
@@ -13,114 +14,127 @@ export interface EmergencyProcedure {
 }
 
 /**
- * Simulated crew-medical first-response steps for critical readings.
- * Not medical advice — mirrors the "stop, stabilize, alert, re-check" flow.
+ * Onboard first-response steps for critical readings, used only after the
+ * flight surgeon has been contacted. Training content, not medical advice.
  */
 export function proceduresFor(metrics: VitalMetrics): EmergencyProcedure[] {
-  const { heartRate: hr, temperatureC: temp, spo2, systolic, diastolic } = metrics
+  const { heartRate: hr, temperatureC: temp, spo2, systolic, diastolic, glucoseMgDl } = metrics
   const out: EmergencyProcedure[] = []
 
-  if (temp != null && temp >= 39) {
+  if (temp != null && temp >= CRITICAL.tempHigh) {
     out.push({
-      condition: 'Hyperthermia',
+      condition: 'High temperature',
       reading: `Temp ${temp}°C`,
-      spokenStep: 'Strip layers and put cold packs on your neck and armpits.',
+      spokenStep: 'Rest, remove extra layers, and sip water.',
       steps: [
-        'Remove exercise layers; move to max cabin airflow or a fan.',
-        'Cold packs on neck, armpits and groin.',
-        'Sip 500 mL of water slowly from a drink bag.',
-      ],
-      recheck: 'temperature',
-      recheckIn: '10 min',
-    })
-  }
-
-  if (temp != null && temp < 35) {
-    out.push({
-      condition: 'Hypothermia',
-      reading: `Temp ${temp}°C`,
-      spokenStep: 'Get into your sleeping bag and add warm layers.',
-      steps: [
-        'Get into a sleeping bag or add insulated layers.',
-        'Move away from vents and cold surfaces.',
-        'Sip a warm drink if fully alert.',
+        'Rest and remove extra exercise layers; move to good cabin airflow.',
+        'Sip water slowly from a drink bag.',
+        'Keep your distance from crewmates in case it is an infection.',
       ],
       recheck: 'temperature',
       recheckIn: '15 min',
     })
   }
 
-  if (hr != null && hr > 140) {
+  if (temp != null && temp < CRITICAL.tempLow) {
     out.push({
-      condition: 'Tachycardia',
-      reading: `HR ${hr} bpm`,
-      spokenStep: 'Call the flight surgeon now. Restrain and breathe slowly.',
+      condition: 'Low temperature',
+      reading: `Temp ${temp}°C`,
+      spokenStep: 'Get into your sleeping bag and add warm layers.',
       steps: [
-        'Call the Crew Medical Officer / flight surgeon immediately.',
-        'Restrain at a handrail or foot loops; stay still.',
-        'Slow breathing: 4 s in, 6 s out.',
-        'Chest pain, dizziness or fainting: crew prepares the AED.',
+        'Get into a sleeping bag or add insulated layers.',
+        'Move away from vents and cold surfaces.',
+      ],
+      recheck: 'temperature',
+      recheckIn: '15 min',
+    })
+  }
+
+  if (hr != null && hr > CRITICAL.hrHigh) {
+    out.push({
+      condition: 'Very fast heart rate',
+      reading: `HR ${hr} bpm`,
+      spokenStep: 'Hold still at a handrail and breathe slowly.',
+      steps: [
+        'Hold still at a handrail or in foot loops.',
+        'Slow breathing: 4 seconds in, 6 seconds out.',
+        'A crewmate stays with you and follows the flight surgeon’s instructions.',
       ],
       recheck: 'heart_rate',
       recheckIn: '2 min',
     })
   }
 
-  if (hr != null && hr < 40) {
+  if (hr != null && hr < CRITICAL.hrLow) {
     out.push({
-      condition: 'Bradycardia',
+      condition: 'Very slow heart rate',
       reading: `HR ${hr} bpm`,
-      spokenStep: 'A crewmate must check you are responsive. Prepare the AED.',
+      spokenStep: 'Stay at rest. A crewmate should stay with you.',
       steps: [
-        'Crewmate checks responsiveness and breathing.',
-        'Restrain at rest; do not exert.',
-        'Unresponsive or faint: crew prepares the AED.',
+        'A crewmate checks that you are awake and breathing normally.',
+        'Stay strapped in at rest; do not exert yourself.',
       ],
       recheck: 'heart_rate',
-      recheckIn: '1 min',
+      recheckIn: '2 min',
     })
   }
 
-  if (spo2 != null && spo2 < 90) {
+  if (spo2 != null && spo2 <= CRITICAL.spo2Low) {
     out.push({
       condition: 'Low oxygen',
       reading: `SpO₂ ${spo2}%`,
-      spokenStep: 'Put on an oxygen mask and check the cabin air alarms.',
+      spokenStep: 'Check the cabin air alarms and breathe slowly.',
       steps: [
-        'Don an oxygen mask from the medical kit.',
-        'Check cabin O₂/CO₂ readouts for an atmosphere fault.',
-        'Slow, deep breaths while restrained.',
+        'Check the cabin oxygen and carbon dioxide readouts for an air fault.',
+        'Slow, deep breaths while held in place.',
       ],
-      recheck: 'heart_rate',
+      recheck: 'spo2',
       recheckIn: '2 min',
     })
   }
 
-  if ((systolic != null && systolic >= 180) || (diastolic != null && diastolic >= 120)) {
+  if (
+    (systolic != null && systolic >= CRITICAL.systolicHigh) ||
+    (diastolic != null && diastolic >= CRITICAL.diastolicHigh)
+  ) {
     out.push({
-      condition: 'Hypertensive crisis',
+      condition: 'Very high blood pressure',
       reading: `BP ${systolic ?? '—'}/${diastolic ?? '—'}`,
-      spokenStep: 'Restrain at rest and breathe calmly. Report any headache.',
+      spokenStep: 'Rest, breathe calmly, and report any headache or vision change.',
       steps: [
-        'Restrain at rest; calm, slow breathing.',
-        'Report headache, vision change or chest pain immediately.',
+        'Rest strapped in; calm, slow breathing.',
+        'Report headache, vision change, chest pain or weakness immediately.',
       ],
-      recheck: 'heart_rate',
+      recheck: 'blood_pressure',
       recheckIn: '5 min',
     })
   }
 
-  if (systolic != null && systolic <= 80) {
+  if (systolic != null && systolic < CRITICAL.systolicLow) {
     out.push({
-      condition: 'Low blood pressure',
+      condition: 'Very low blood pressure',
       reading: `BP ${systolic}/${diastolic ?? '—'}`,
-      spokenStep: 'Drink a fluid load with salt tablets and stay restrained.',
+      spokenStep: 'Stay strapped in at rest and avoid sudden movement.',
       steps: [
-        'Drink 1 L of fluid with salt tablets (fluid loading).',
-        'Restrain at rest; avoid sudden movement.',
+        'Stay strapped in at rest; avoid sudden movement.',
+        'A crewmate stays with you until the flight surgeon advises.',
       ],
-      recheck: 'heart_rate',
+      recheck: 'blood_pressure',
       recheckIn: '5 min',
+    })
+  }
+
+  if (glucoseMgDl != null && glucoseMgDl < CRITICAL.glucoseLow) {
+    out.push({
+      condition: 'Very low blood sugar',
+      reading: `Glucose ${glucoseMgDl} mg/dL`,
+      spokenStep: 'If you can swallow safely, have fast sugar now.',
+      steps: [
+        'If you can swallow safely, have 15 grams of fast sugar (juice or glucose gel).',
+        'A crewmate stays with you.',
+      ],
+      recheck: 'glucose',
+      recheckIn: '15 min',
     })
   }
 
@@ -128,4 +142,3 @@ export function proceduresFor(metrics: VitalMetrics): EmergencyProcedure[] {
 }
 
 export const PROCEDURE_FIRST_STEP = 'Stop exercise and unclip from the device.'
-export const PROCEDURE_LAST_STEP = 'Alert the Crew Medical Officer and flight surgeon.'

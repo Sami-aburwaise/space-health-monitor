@@ -25,7 +25,18 @@ export default defineConfig({
       '/proxy/elevenlabs': {
         target: 'https://api.elevenlabs.io',
         changeOrigin: true,
+        xfwd: false,
         rewrite: (p) => p.replace(/^\/proxy\/elevenlabs/, ''),
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('x-forwarded-for')
+            proxyReq.removeHeader('x-forwarded-host')
+            proxyReq.removeHeader('x-forwarded-proto')
+            proxyReq.removeHeader('x-real-ip')
+            proxyReq.removeHeader('forwarded')
+            proxyReq.removeHeader('via')
+          })
+        },
       },
       '/proxy/exercise': {
         target: 'https://api.exerciseapi.dev',

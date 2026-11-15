@@ -1,8 +1,12 @@
+import { getCachedSpeech, putCachedSpeech, ttsCacheId } from '@/lib/api/ttsCache'
+
 /** Default: Adam — override via Settings / VITE_ELEVENLABS_VOICE_ID */
 export const DEFAULT_ELEVEN_VOICE = 'pNInz6obpgDQGcFmaJgB'
 
 /** Fast model with style exaggeration support */
 const MODEL_ID = 'eleven_turbo_v2_5'
+/** 64 kbps keeps stored clips small; the radio filter hides the difference */
+const OUTPUT_FORMAT = 'mp3_44100_64'
 
 const CACHE_LIMIT = 24
 const blobCache = new Map<string, Blob>()
@@ -36,37 +40,47 @@ export async function synthesizeSpeech(
   const cached = blobCache.get(key)
   if (cached) return cached
 
+  const storedId = ttsCacheId(MODEL_ID, OUTPUT_FORMAT, voiceId, dramatic)
+  const stored = getCachedSpeech(storedId)
+  if (stored) {
+    remember(key, stored)
+    return stored
+  }
+
   const pending = inflight.get(key)
   if (pending) return pending
 
   const request = (async () => {
-    const res = await fetch(
-      `/proxy/elevenlabs/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128&optimize_streaming_latency=3`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': apiKey,
-          Accept: 'audio/mpeg',
-        },
-        body: JSON.stringify({
-          text: dramatic.slice(0, 2500),
-          model_id: MODEL_ID,
-          voice_settings: {
-            stability: 0.12,
-            similarity_boost: 0.9,
-            style: 0.95,
-            use_speaker_boost: true,
-          },
-        }),
+    const path = `/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${OUTPUT_FORMAT}`
+    const body = JSON.stringify({
+      text: dramatic.slice(0, 2500),
+      model_id: MODEL_ID,
+      voice_settings: {
+        stability: 0.35,
+        similarity_boost: 0.8,
+        use_speaker_boost: true,
       },
-    )
+    })
+    const headers = {
+      'Content-Type': 'application/json',
+      'xi-api-key': apiKey,
+      Accept: 'audio/mpeg',
+    }
+    // Call ElevenLabs from the browser first. The Vite proxy is flagged as a
+    // VPN on free accounts and they disable TTS with 401 unusual activity.
+    let res: Response
+    try {
+      res = await fetch(`https://api.elevenlabs.io${path}`, { method: 'POST', headers, body })
+    } catch {
+      res = await fetch(`/proxy/elevenlabs${path}`, { method: 'POST', headers, body })
+    }
 
     if (!res.ok) {
       let detail = res.statusText
       try {
-        const body = await res.json()
-        detail = body?.detail?.message || body?.detail || detail
+        const errBody = await res.json()
+        const nested = errBody?.detail
+        detail = typeof nested === 'string' ? nested : nested?.message || detail
       } catch {
         /* ignore */
       }
@@ -75,6 +89,7 @@ export async function synthesizeSpeech(
 
     const blob = await res.blob()
     remember(key, blob)
+    void putCachedSpeech(storedId, blob).catch(() => {})
     return blob
   })()
 

@@ -1,4 +1,12 @@
 import * as THREE from 'three'
+import {
+  AVATAR_TOOLS,
+  buildInstruments,
+  type AvatarTool,
+  type Instrument,
+} from '@/lib/avatar/instruments'
+
+export type { AvatarTool } from '@/lib/avatar/instruments'
 
 export type AvatarState = 'idle' | 'thinking' | 'speaking'
 export type AvatarMood = 'neutral' | 'happy' | 'sad' | 'emergency'
@@ -119,6 +127,13 @@ export class RobotAstronaut {
     emergency: 0,
   }
 
+  private instruments!: Record<AvatarTool, Instrument>
+  private tool: AvatarTool | null = null
+  private readonly toolWeights = Object.fromEntries(AVATAR_TOOLS.map((t) => [t, 0])) as Record<
+    AvatarTool,
+    number
+  >
+
   private frameId = 0
   private running = false
   private time = 0
@@ -163,6 +178,11 @@ export class RobotAstronaut {
   /** Baseline expression held between one-shot emotions. */
   setMood(mood: AvatarMood) {
     this.mood = mood
+  }
+
+  /** Hold up a measuring instrument and act out how to use it; null puts it away. */
+  setTool(tool: AvatarTool | null) {
+    this.tool = tool
   }
 
   /** Play an emotion for a few seconds, then fall back to the mood. */
@@ -259,6 +279,47 @@ export class RobotAstronaut {
     w.speaking = easeTo(w.speaking, this.state === 'speaking' ? 1 : 0, 7, dt)
     for (const e of EMOTIONS) {
       w[e] = easeTo(w[e], emotion === e ? 1 : 0, 6, dt)
+    }
+    for (const t of AVATAR_TOOLS) {
+      this.toolWeights[t] = easeTo(this.toolWeights[t], this.tool === t ? 1 : 0, 5, dt)
+    }
+  }
+
+  /** Blends arms and head toward the active instrument's pose and animates it. */
+  private animateTools() {
+    const blendArm = (arm: THREE.Group, pick: (i: Instrument) => Instrument['right']) => {
+      let total = 0
+      let x = 0
+      let z = 0
+      for (const t of AVATAR_TOOLS) {
+        const pose = pick(this.instruments[t])
+        const w = this.toolWeights[t]
+        if (!pose || w < 0.001) continue
+        total += w
+        x += pose.x * w
+        z += pose.z * w
+      }
+      if (total < 0.001) return
+      const amount = Math.min(1, total)
+      arm.rotation.x = lerp(arm.rotation.x, x / total, amount)
+      arm.rotation.y = lerp(arm.rotation.y, 0, amount)
+      arm.rotation.z = lerp(arm.rotation.z, z / total, amount)
+    }
+    blendArm(this.armRight, (i) => i.right)
+    blendArm(this.armLeft, (i) => i.left)
+
+    for (const t of AVATAR_TOOLS) {
+      const w = this.toolWeights[t]
+      const inst = this.instruments[t]
+      const shown = w > 0.02
+      inst.group.visible = shown
+      if (inst.leftArm) inst.leftArm.visible = shown
+      if (!shown) continue
+      inst.group.scale.setScalar(w)
+      inst.leftArm?.scale.setScalar(w)
+      this.head.rotation.x = lerp(this.head.rotation.x, inst.head.x, w)
+      this.head.rotation.y = lerp(this.head.rotation.y, inst.head.y, w)
+      inst.update(this.time)
     }
   }
 
@@ -397,6 +458,8 @@ export class RobotAstronaut {
     const kick = Math.sin(t * 12) * 0.25 * cheer * motion
     this.legRight.rotation.x = Math.sin(t * 1.3) * 0.03 * motion + kick
     this.legLeft.rotation.x = Math.sin(t * 1.3 + 1) * 0.03 * motion - kick
+
+    this.animateTools()
   }
 
   private animateFace(
@@ -543,6 +606,16 @@ export class RobotAstronaut {
     this.head.position.y = 1.12
     this.body.add(this.head)
     this.buildHead()
+
+    this.instruments = buildInstruments(this.jointMat)
+    for (const inst of Object.values(this.instruments)) {
+      inst.group.visible = false
+      this.body.add(inst.group)
+      if (inst.leftArm) {
+        inst.leftArm.visible = false
+        this.armLeft.add(inst.leftArm)
+      }
+    }
   }
 
   private buildLeg(leg: THREE.Group, x: number) {

@@ -8,20 +8,20 @@ export const COACH_STATES: CoachState[] = [
   'coach_set',
   'measure_strength',
   'measure_hr',
-  'nutrition',
   'debrief',
+  'checkin',
 ]
 
 export const COACH_TRANSITIONS: Record<CoachState, CoachState[]> = {
-  idle: ['greet', 'collect_vitals'],
+  idle: ['greet', 'collect_vitals', 'checkin', 'coach_set'],
   greet: ['collect_vitals', 'prescribe_exercise'],
-  collect_vitals: ['prescribe_exercise', 'measure_hr', 'nutrition', 'debrief'],
+  collect_vitals: ['prescribe_exercise', 'measure_hr', 'debrief'],
   prescribe_exercise: ['coach_set', 'measure_hr', 'collect_vitals'],
   coach_set: ['measure_strength', 'measure_hr', 'prescribe_exercise', 'debrief'],
-  measure_strength: ['measure_hr', 'coach_set', 'debrief', 'nutrition'],
-  measure_hr: ['prescribe_exercise', 'coach_set', 'nutrition', 'debrief'],
-  nutrition: ['collect_vitals', 'prescribe_exercise', 'debrief'],
+  measure_strength: ['measure_hr', 'coach_set', 'debrief'],
+  measure_hr: ['prescribe_exercise', 'coach_set', 'debrief'],
   debrief: ['idle', 'greet', 'collect_vitals'],
+  checkin: ['idle', 'collect_vitals', 'coach_set', 'checkin'],
 }
 
 export function canTransition(from: CoachState, to: CoachState): boolean {

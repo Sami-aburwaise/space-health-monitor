@@ -1,16 +1,14 @@
 import { criticalVitalLabel } from '@/lib/extractVitals'
-import {
-  PROCEDURE_FIRST_STEP,
-  PROCEDURE_LAST_STEP,
-  proceduresFor,
-} from '@/lib/coach/procedures'
+import { measurePrompt } from '@/lib/coach/measurePrompts'
+import { PROCEDURE_FIRST_STEP, proceduresFor } from '@/lib/coach/procedures'
+import { ENVIRONMENTS } from '@/lib/health/environment'
 import type {
   AvatarEmotion,
   AvatarMood,
   CoachState,
   MeasureKind,
-  MeasurePromptData,
   MessageBlock,
+  MissionEnvironment,
   TriageLevel,
   VitalMetrics,
 } from '@/types/health'
@@ -26,59 +24,45 @@ export interface EmergencyTurn {
   loggedVitals: boolean
 }
 
-const RECHECK_PROMPTS: Record<Exclude<MeasureKind, 'strength'>, MeasurePromptData> = {
-  heart_rate: {
-    kind: 'heart_rate',
-    title: 'Re-check heart rate',
-    hint: 'Only once stable and restrained.',
-    unit: 'bpm',
-    source: 'manual',
-    starterText: 'My heart rate is ',
-  },
-  temperature: {
-    kind: 'temperature',
-    title: 'Re-check temperature',
-    hint: 'After cooling or warming steps.',
-    unit: '°C',
-    source: 'manual',
-    starterText: 'My temperature is ',
-  },
-}
-
 const RECHECK_LABEL: Record<MeasureKind, string> = {
   heart_rate: 'heart rate',
   temperature: 'temperature',
+  blood_pressure: 'blood pressure',
+  glucose: 'blood glucose',
+  sleep: 'sleep',
+  mood: 'mood',
+  spo2: 'blood oxygen',
   strength: 'strength',
 }
 
 /** Guaranteed local emergency reply — never depends on Claude. */
-export function buildEmergencyTurn(metrics: VitalMetrics): EmergencyTurn {
+export function buildEmergencyTurn(
+  metrics: VitalMetrics,
+  environment: MissionEnvironment = 'station',
+): EmergencyTurn {
   const procedures = proceduresFor(metrics)
   const conditions = procedures.map((p) => p.condition)
   const title = conditions.join(' + ') || 'Critical reading'
   const readings =
     procedures.length > 0 ? procedures.map((p) => p.reading) : [criticalVitalLabel(metrics)]
 
-  const recheckKinds = [...new Set(procedures.map((p) => p.recheck))].filter(
-    (k): k is Exclude<MeasureKind, 'strength'> => k !== 'strength',
-  )
+  const recheckKinds = [...new Set(procedures.map((p) => p.recheck))]
   if (recheckKinds.length === 0) recheckKinds.push('heart_rate')
 
   const steps = [
     PROCEDURE_FIRST_STEP,
+    ENVIRONMENTS[environment].contactGround,
     ...procedures.flatMap((p) => p.steps),
     ...procedures.map((p) => `Re-check ${RECHECK_LABEL[p.recheck]} in ${p.recheckIn}.`),
-    PROCEDURE_LAST_STEP,
   ]
   const uniqueSteps = [...new Set(steps)]
 
-  const text = `**EMERGENCY:** ${title}. Follow the procedure now.`
+  const text = `**EMERGENCY:** ${title}. Contact the flight surgeon now and follow the steps.`
   const spokenStep = procedures[0]?.spokenStep ?? ''
   const speakText = [
     `Emergency. ${title.replace(' + ', ' and ')}.`,
-    'Stop exercise now.',
+    'Stop exercise and contact the flight surgeon now.',
     spokenStep,
-    'Alert the flight surgeon.',
   ]
     .filter(Boolean)
     .join(' ')
@@ -89,13 +73,13 @@ export function buildEmergencyTurn(metrics: VitalMetrics): EmergencyTurn {
     blocks: [
       { type: 'text', text },
       { type: 'procedure', procedure: { title, readings, steps: uniqueSteps } },
-      ...recheckKinds.map(
-        (kind): MessageBlock => ({ type: 'measure_prompt', prompt: RECHECK_PROMPTS[kind] }),
+      ...recheckKinds.map((kind) =>
+        measurePrompt(kind, { title: `Re-check ${RECHECK_LABEL[kind]}` }),
       ),
     ],
     avatarEmotion: 'emergency',
     avatarMood: 'emergency',
-    coachState: recheckKinds[0] === 'temperature' ? 'collect_vitals' : 'measure_hr',
+    coachState: 'collect_vitals',
     triageLevel: 'emergency',
     loggedVitals: true,
   }

@@ -1,7 +1,7 @@
 export type MessageIntent =
   | 'start_routine'
+  | 'daily_checkin'
   | 'vital_report'
-  | 'food_query'
   | 'strength_test'
   | 'exercise_done'
   | 'symptom'
@@ -10,9 +10,12 @@ export type MessageIntent =
 
 /** Sent by the Start routine button; rendered as "Started routine" in the chat. */
 export const START_ROUTINE_CMD = '[START_ROUTINE]'
+/** Sent by the Daily check-in button; rendered as "Started daily check-in". */
+export const DAILY_CHECKIN_CMD = '[DAILY_CHECKIN]'
+
+const CHECKIN = /\[daily_checkin\]|\b(daily\s+check[\s-]?in|check[\s-]?in)\b/i
 
 const START = /\[start_routine\]|\b(start\s+(my\s+)?(routine|session|training)|begin\s+routine)\b/i
-const FOOD = /\b(calor(?:ie|ies)|food|meal|eat|tortilla|protein|macro)\b/i
 const STRENGTH = /\b(strength\s*test|grip|asteroid\s*run|shield\s*charge)\b/i
 const DONE = /\b(done|finished|completed|next\s*set|next\s*exercise)\b/i
 /** Mid-workout "keep going" / "where's the card" — not a symptom report. */
@@ -21,7 +24,7 @@ const CONTINUE =
 const SYMPTOM = /\b(headache|dizzy|nausea|pain|sore|fatigue|tired|hurt)\b/i
 const PLAY = /\bplay\b/i
 const VITAL =
-  /\b(heart\s*rate|hr|pulse|bpm|temp(?:erature)?|spo\s*2|blood\s*pressure|b\.?p\.?|°\s*c)\b/i
+  /\b(heart\s*rate|hr|pulse|bpm|temp(?:erature)?|spo\s*2|blood\s*pressure|b\.?p\.?|°\s*c|glucose|blood\s*sugar|mg\/dl|slept|mood)\b/i
 
 /** True when the crew is mid-set and the message is just agreeing to continue. */
 export function isWorkoutContinue(text: string): boolean {
@@ -33,10 +36,10 @@ export function classifyMessage(text: string): MessageIntent {
   const t = text.trim()
   if (!t) return 'general'
   if (START.test(t)) return 'start_routine'
+  if (CHECKIN.test(t)) return 'daily_checkin'
   if (PLAY.test(t) && STRENGTH.test(t)) return 'play_game'
   if (PLAY.test(t)) return 'play_game'
   if (STRENGTH.test(t)) return 'strength_test'
-  if (FOOD.test(t)) return 'food_query'
   if (VITAL.test(t) || /\d/.test(t)) {
     // Prefer vital if numbers look like readings
     if (VITAL.test(t) || /\d{2,3}\s*(bpm|c|°)/i.test(t)) return 'vital_report'

@@ -1,3 +1,4 @@
+import { COACH_STATES } from '@/lib/coach/stateMachine'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import type { CoachSession, CoachState } from '@/types/health'
 
@@ -7,10 +8,16 @@ const DEFAULT: CoachSession = {
   updatedAt: new Date(0).toISOString(),
 }
 
+function asCoachState(value: unknown): CoachState {
+  return typeof value === 'string' && COACH_STATES.includes(value as CoachState)
+    ? (value as CoachState)
+    : 'idle'
+}
+
 export function useCoachSession(storageKey = 'coach') {
   const [stored, setSession] = useLocalStorage<Partial<CoachSession>>(storageKey, DEFAULT)
   const session: CoachSession = {
-    state: stored.state ?? 'idle',
+    state: asCoachState(stored.state),
     routineSlot: stored.routineSlot ?? 0,
     updatedAt: stored.updatedAt ?? DEFAULT.updatedAt,
   }

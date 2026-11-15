@@ -6,19 +6,48 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { ArduinoSettingsCard } from '@/components/settings/ArduinoSettingsCard'
+import type { ArduinoLinkPhase, ArduinoTransport } from '@/hooks/useArduinoLink'
+import { ENVIRONMENT_ORDER, ENVIRONMENTS } from '@/lib/health/environment'
+import type { HallCircuit } from '@/lib/serial/hall'
 import { clearAllAppData } from '@/lib/storage'
 import { cn } from '@/lib/utils'
-import type { CrewProfile } from '@/types/health'
+import type { CrewProfile, MissionEnvironment } from '@/types/health'
 
 interface SettingsViewProps {
   profiles: CrewProfile[]
   activeId: string
+  environment: MissionEnvironment
+  onEnvironment: (env: MissionEnvironment) => void
   onSwitch: (id: string) => void
   onCreate: (name: string) => void
   onRename: (id: string, name: string) => void
   onDelete: (id: string) => void
   onClearChat: () => void
   onClearVitals: () => void
+  /** Fills the active profile with 14 days of sample readings for demos. */
+  onLoadSampleVitals: () => void
+  ttsEnabled: boolean
+  onTtsEnabled: (enabled: boolean) => void
+  arduinoPort: string
+  arduinoBaudRate: number
+  arduinoBridgeUrl: string
+  onArduinoPort: (port: string) => void
+  onArduinoBaudRate: (baudRate: number) => void
+  onArduinoBridgeUrl: (bridgeUrl: string) => void
+  arduinoWebSerial: boolean
+  arduinoPhase: ArduinoLinkPhase
+  arduinoError: string | null
+  arduinoHall: HallCircuit | null
+  arduinoHeartRate: number | null
+  arduinoTransport: ArduinoTransport | null
+  arduinoDeviceLabel: string | null
+  arduinoGrantedPorts: number
+  onConnectSerial: () => void
+  onReconnectSerial: () => void
+  onConnectBridge: () => void
+  onDisconnectArduino: () => void
+  onRefreshArduinoPorts: () => void
 }
 
 const fieldClass =
@@ -27,12 +56,36 @@ const fieldClass =
 export function SettingsView({
   profiles,
   activeId,
+  environment,
+  onEnvironment,
   onSwitch,
   onCreate,
   onRename,
   onDelete,
   onClearChat,
   onClearVitals,
+  onLoadSampleVitals,
+  ttsEnabled,
+  onTtsEnabled,
+  arduinoPort,
+  arduinoBaudRate,
+  arduinoBridgeUrl,
+  onArduinoPort,
+  onArduinoBaudRate,
+  onArduinoBridgeUrl,
+  arduinoWebSerial,
+  arduinoPhase,
+  arduinoError,
+  arduinoHall,
+  arduinoHeartRate,
+  arduinoTransport,
+  arduinoDeviceLabel,
+  arduinoGrantedPorts,
+  onConnectSerial,
+  onReconnectSerial,
+  onConnectBridge,
+  onDisconnectArduino,
+  onRefreshArduinoPorts,
 }: SettingsViewProps) {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -197,12 +250,100 @@ export function SettingsView({
 
           <Card className="min-w-0 border-[#222226] bg-[#111113] shadow-none">
             <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-sm text-zinc-100">Mission environment</CardTitle>
+              <p className="text-xs font-normal text-zinc-500">
+                Changes the signal delay and how alerts tell you to reach the flight surgeon.
+              </p>
+            </CardHeader>
+            <CardContent className="grid min-w-0 gap-2 px-4 pb-4 sm:grid-cols-2 sm:px-6 sm:pb-6">
+              {ENVIRONMENT_ORDER.map((id) => {
+                const env = ENVIRONMENTS[id]
+                const active = id === environment
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => onEnvironment(id)}
+                    className={cn(
+                      'rounded-xl border px-3 py-2.5 text-left transition-colors',
+                      active
+                        ? 'border-emerald-500/40 bg-emerald-500/10'
+                        : 'border-[#222226] bg-[#0A0A0B] hover:bg-zinc-900',
+                    )}
+                  >
+                    <p className="text-sm font-medium text-zinc-100">{env.label}</p>
+                    <p className="text-[11px] text-zinc-500">
+                      {env.gravity} · {env.commsDelay}
+                    </p>
+                  </button>
+                )
+              })}
+            </CardContent>
+          </Card>
+
+          <Card className="min-w-0 border-[#222226] bg-[#111113] shadow-none">
+            <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-sm text-zinc-100">Voice</CardTitle>
+              <p className="text-xs font-normal text-zinc-500">
+                Speaks replies and the commentary after a game. Turn this off to keep results on screen only.
+              </p>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
+              <Button
+                type="button"
+                variant="outline"
+                aria-pressed={ttsEnabled}
+                className={
+                  ttsEnabled
+                    ? 'h-9 border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15'
+                    : 'h-9 border-[#222226] bg-[#0A0A0B] text-zinc-300 hover:bg-zinc-900'
+                }
+                onClick={() => onTtsEnabled(!ttsEnabled)}
+              >
+                {ttsEnabled ? 'Voice on' : 'Voice off'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <ArduinoSettingsCard
+            port={arduinoPort}
+            baudRate={arduinoBaudRate}
+            bridgeUrl={arduinoBridgeUrl}
+            onPort={onArduinoPort}
+            onBaudRate={onArduinoBaudRate}
+            onBridgeUrl={onArduinoBridgeUrl}
+            webSerial={arduinoWebSerial}
+            phase={arduinoPhase}
+            error={arduinoError}
+            hall={arduinoHall}
+            heartRate={arduinoHeartRate}
+            transport={arduinoTransport}
+            deviceLabel={arduinoDeviceLabel}
+            grantedPorts={arduinoGrantedPorts}
+            onConnectSerial={onConnectSerial}
+            onReconnectSerial={onReconnectSerial}
+            onConnectBridge={onConnectBridge}
+            onDisconnect={onDisconnectArduino}
+            onRefreshGranted={onRefreshArduinoPorts}
+          />
+
+          <Card className="min-w-0 border-[#222226] bg-[#111113] shadow-none">
+            <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
               <CardTitle className="text-sm text-zinc-100">Data controls</CardTitle>
               <p className="text-xs font-normal text-zinc-500">
                 Clears data for the active profile only, except Clear Local Data.
               </p>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 px-4 pb-4 sm:px-6 sm:pb-6">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full justify-center border-emerald-500/30 bg-emerald-500/5 text-emerald-200 hover:bg-emerald-500/10 sm:justify-start"
+                onClick={onLoadSampleVitals}
+              >
+                Load 14-day sample vitals
+              </Button>
               <Button
                 type="button"
                 variant="outline"

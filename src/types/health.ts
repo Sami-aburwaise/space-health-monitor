@@ -1,4 +1,7 @@
-export type AppView = 'chat' | 'vitals' | 'settings'
+export type AppView = 'chat' | 'vitals' | 'sources' | 'settings'
+
+/** Where the crew is — changes comms delay and how "contact ground" is phrased. */
+export type MissionEnvironment = 'station' | 'moon' | 'mars' | 'rover'
 
 export type MessageRole = 'user' | 'assistant' | 'system'
 
@@ -14,10 +17,19 @@ export type CoachState =
   | 'coach_set'
   | 'measure_strength'
   | 'measure_hr'
-  | 'nutrition'
   | 'debrief'
+  /** Daily check-in, one indicator at a time */
+  | 'checkin'
 
-export type MeasureKind = 'heart_rate' | 'temperature' | 'strength'
+export type MeasureKind =
+  | 'heart_rate'
+  | 'temperature'
+  | 'blood_pressure'
+  | 'glucose'
+  | 'sleep'
+  | 'mood'
+  | 'spo2'
+  | 'strength'
 
 export interface GameAction {
   gameId: string
@@ -73,20 +85,6 @@ export interface ExerciseCardData {
   aspectRatio?: string
 }
 
-export interface NutritionCardData {
-  name: string
-  brandName?: string | null
-  calories100g: number
-  protein100g: number
-  carbs100g: number
-  fat100g: number
-  fiber100g?: number
-  servingLabel?: string
-  /** Always true for coach estimates (no Calorie API) */
-  estimated?: boolean
-  note?: string
-}
-
 export interface MeasurePromptData {
   kind: MeasureKind
   title: string
@@ -96,16 +94,29 @@ export interface MeasurePromptData {
   unit?: string
   /** Future: 'arduino' | 'manual' — UI is ready for serial sensors */
   source?: 'manual' | 'arduino'
-  /** Demo tour only: the card types this value in by itself and is never submitted */
-  demoFill?: number
+}
+
+/** A reply button; tapping it sends `message` as the user. */
+export interface ChoiceData {
+  label: string
+  message: string
 }
 
 export type MessageBlock =
   | { type: 'text'; text: string }
   | { type: 'exercise'; exercise: ExerciseCardData }
-  | { type: 'nutrition'; food: NutritionCardData }
   | { type: 'measure_prompt'; prompt: MeasurePromptData }
   | { type: 'procedure'; procedure: ProcedureCardData }
+  | { type: 'choices'; choices: ChoiceData[] }
+  /** What Normal / Watch / Alert mean — an explanation, never a result */
+  | { type: 'status_key' }
+  /** Today's overall vitals level, shown as a color-coded badge in chat */
+  | {
+      type: 'overall_status'
+      level: 'normal' | 'watch' | 'alert'
+      sentence: string
+      notes: string[]
+    }
 
 export interface ProcedureCardData {
   title: string
@@ -124,7 +135,7 @@ export interface ChatMessage {
   loggedVitals?: boolean
   gameAction?: GameAction
   gameTelemetry?: GameTelemetryPayload
-  /** Rich bubble blocks (exercise media, measure prompts, nutrition) */
+  /** Rich bubble blocks (exercise media, measure prompts, procedures) */
   blocks?: MessageBlock[]
   /** Claude-selected emotion for the 3D avatar on this turn */
   avatarEmotion?: AvatarEmotion
@@ -147,6 +158,12 @@ export interface VitalReading {
   spo2?: number
   temperatureC?: number
   weightKg?: number
+  /** Fasting blood glucose, mg/dL */
+  glucoseMgDl?: number
+  /** Hours slept last night */
+  sleepHours?: number
+  /** Self-rated mood, 1 (very low) to 5 (very good) */
+  moodScore?: number
   /** Short excerpt of the chat message that produced this reading */
   rawExcerpt?: string
 }
@@ -159,6 +176,14 @@ export interface AppSettings {
   crewName?: string
   simulateDelayMs: number
   sidebarCollapsed: boolean
+  environment: MissionEnvironment
+  /** Speak assistant replies and game commentary. */
+  ttsEnabled: boolean
+  /** Display name for the Arduino port, e.g. COM3 or /dev/ttyUSB0. */
+  arduinoPort: string
+  arduinoBaudRate: number
+  /** Optional WebSocket bridge. Empty uses the browser Web Serial picker. */
+  arduinoBridgeUrl: string
 }
 
 export interface CrewProfile {

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { v4 as uuid } from 'uuid'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { buildTwoWeekSampleVitals } from '@/lib/health/sampleVitals'
 import type { VitalMetrics, VitalReading } from '@/types/health'
 
 export function useVitals(storageKey = 'vitals') {
@@ -26,5 +27,10 @@ export function useVitals(storageKey = 'vitals') {
 
   const clearVitals = useCallback(() => setVitals([]), [setVitals])
 
-  return { vitals, addVitalFromChat, clearVitals, latest: vitals[0] ?? null }
+  /** Replaces this profile's vitals with a 14-day sample set (demo / review). */
+  const loadSampleVitals = useCallback(() => {
+    setVitals(buildTwoWeekSampleVitals())
+  }, [setVitals])
+
+  return { vitals, addVitalFromChat, clearVitals, loadSampleVitals, latest: vitals[0] ?? null }
 }

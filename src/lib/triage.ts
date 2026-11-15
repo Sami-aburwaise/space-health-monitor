@@ -77,15 +77,14 @@ export function simulateHealthReply(
   if (isPlayIntent(userText)) {
     return {
       content:
-        'Ready for crew neuromuscular & motor telemetry assessment. Launch the **Asteroid Run & Shield Charge** protocol to evaluate grip strength, response times, and isometric endurance in simulated microgravity.',
+        'Want a quick grip workout? **Asteroid Run & Shield Charge** is a fitness game: squeeze to dodge asteroids and hold to charge the shield. It is for fun and training, not a medical test.',
       triageLevel: 'info',
       gameAction: {
         gameId: 'asteroid-run',
         title: 'Asteroid Run & Shield Charge',
-        description:
-          'NASA Bio-Telemetry Grip & Neuromuscular Assessment. 30-rep quota with isometric solar shield hold.',
+        description: 'Grip fitness game. 30-rep goal with a shield hold. Not a medical test.',
         url: '/games/asteroid-run.html',
-        badge: 'NASA BIO-SYS // CREW EXERCISE',
+        badge: 'FITNESS GAME',
       },
     }
   }
@@ -99,16 +98,16 @@ export function simulateHealthReply(
     monitor:
       'Your description suggests something worth watching. Mention updated vitals in chat so trends stay current.',
     urgent:
-      'Your description raises concern. If symptoms worsen, seek medical evaluation promptly. This app cannot replace a clinician.',
+      'Your description raises concern. Stop exercising and contact the flight surgeon. This app cannot replace a clinician.',
     emergency:
-      'This may be an emergency. Stop using this chat as your primary aid — contact emergency / medical services immediately if available.',
+      'This may be an emergency. Stop exercising and contact the flight surgeon and your Crew Medical Officer now.',
   }
 
   const nextSteps: Record<TriageLevel, string> = {
-    info: 'Share heart rate, blood pressure, SpO₂, or temperature in chat to build your vitals history.',
-    monitor: 'Rest, hydrate, and re-check vitals in 1–2 hours — then tell me the numbers here.',
-    urgent: 'Avoid strenuous activity. Escalate if breathing difficulty, chest pain, or confusion appear.',
-    emergency: 'Call emergency services or your mission medical officer now. Do not delay for further chat replies.',
+    info: 'Tap **Daily check-in** to log heart rate, blood pressure, glucose, temperature, sleep and mood.',
+    monitor: 'Rest, drink water, and re-check your vitals in 1–2 hours, then tell me the numbers here.',
+    urgent: 'Rest and measure your heart rate and temperature. Tell the flight surgeon if it gets worse.',
+    emergency: 'Go to the medical bay. Do not wait for more chat replies.',
   }
 
   const lines = [intros[level], '']
